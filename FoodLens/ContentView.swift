@@ -211,8 +211,14 @@ private struct NutritionPlanView: View {
     @State private var profile = NutritionProfile()
     @State private var planAdded = false
     @State private var goalsApplied = false
+    @State private var showPlanAlert = false
+    @State private var showGoalsAlert = false
 
-    private var plan: [PlannedMeal] { MealPlanBuilder.make(profile: profile) }
+    private var profileIsValid: Bool {
+        (100...250).contains(profile.heightCM) && (30...350).contains(profile.weightKG)
+    }
+
+    private var plan: [PlannedMeal] { profileIsValid ? MealPlanBuilder.make(profile: profile) : [] }
     private var bmiDescription: String {
         switch profile.bmi {
         case ..<18.5: "нижче рекомендованого діапазону"
@@ -241,22 +247,27 @@ private struct NutritionPlanView: View {
             }
 
             Section("Розрахована норма") {
-                LabeledContent("Базовий обмін", value: "\(Int(profile.bmr)) ккал")
-                LabeledContent("Підтримка ваги", value: "\(Int(profile.maintenanceCalories)) ккал")
-                LabeledContent("Ціль на день") { Text("\(Int(profile.targetCalories)) ккал").bold().foregroundStyle(.green) }
-                LabeledContent("Білки", value: "\(Int(profile.calculatedGoals.protein)) г")
-                LabeledContent("Жири", value: "\(Int(profile.calculatedGoals.fat)) г")
-                LabeledContent("Вуглеводи", value: "\(Int(profile.calculatedGoals.carbs)) г")
-                LabeledContent("ІМТ", value: String(format: "%.1f — %@", profile.bmi, bmiDescription))
+                if !profileIsValid {
+                    Text("Вкажіть зріст 100–250 см і вагу 30–350 кг.").foregroundStyle(.orange)
+                } else {
+                    LabeledContent("Базовий обмін", value: "\(Int(profile.bmr)) ккал")
+                    LabeledContent("Підтримка ваги", value: "\(Int(profile.maintenanceCalories)) ккал")
+                    LabeledContent("Ціль на день") { Text("\(Int(profile.targetCalories)) ккал").bold().foregroundStyle(.green) }
+                    LabeledContent("Білки", value: "\(Int(profile.calculatedGoals.protein)) г")
+                    LabeledContent("Жири", value: "\(Int(profile.calculatedGoals.fat)) г")
+                    LabeledContent("Вуглеводи", value: "\(Int(profile.calculatedGoals.carbs)) г")
+                    LabeledContent("ІМТ", value: String(format: "%.1f — %@", profile.bmi, bmiDescription))
+                }
                 Button {
                     diary.goals = profile.calculatedGoals
                     goalsApplied = true
+                    showGoalsAlert = true
                 } label: {
                     Text(goalsApplied ? "Цілі застосовано" : "Застосувати як мої денні цілі")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(goalsApplied)
+                .disabled(goalsApplied || !profileIsValid)
             }
 
             Section("Приклад меню на день") {
@@ -279,7 +290,8 @@ private struct NutritionPlanView: View {
                         ))
                     }
                     planAdded = true
-                }.disabled(planAdded)
+                    showPlanAlert = true
+                }.disabled(planAdded || !profileIsValid)
             }
 
             Section {
@@ -288,8 +300,9 @@ private struct NutritionPlanView: View {
             }
         }
         .navigationTitle("План харчування")
-        .alert("Меню додано", isPresented: $planAdded) { Button("OK") {} } message: { Text("Чотири прийоми їжі збережено у сьогоднішньому щоденнику.") }
-        .alert("Денні цілі оновлено", isPresented: $goalsApplied) { Button("OK") {} } message: { Text("Калорії, БЖВ, клітковина та вода збережені на головному екрані.") }
+        .onChange(of: profile.goalsKey) { _, _ in goalsApplied = false; planAdded = false }
+        .alert("Меню додано", isPresented: $showPlanAlert) { Button("OK") {} } message: { Text("Чотири прийоми їжі збережено у сьогоднішньому щоденнику.") }
+        .alert("Денні цілі оновлено", isPresented: $showGoalsAlert) { Button("OK") {} } message: { Text("Калорії, БЖВ, клітковина та вода збережені на головному екрані.") }
     }
 }
 
@@ -416,7 +429,14 @@ private struct ScanView: View {
 
     var body: some View {
         Group {
-            if camera.permissionDenied || camera.cameraUnavailable {
+            if let image = camera.photo {
+                MealResultView(image: image) {
+                    camera.photo = nil
+                    selectedPhoto = nil
+                    camera.start()
+                }
+                .id(ObjectIdentifier(image))
+            } else if camera.permissionDenied || camera.cameraUnavailable {
                 VStack(spacing: 20) {
                     ContentUnavailableView(
                         camera.permissionDenied ? "Немає доступу до камери" : "Камера недоступна",
@@ -426,8 +446,6 @@ private struct ScanView: View {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) { Label("Вибрати фото", systemImage: "photo.on.rectangle") }
                         .buttonStyle(.borderedProminent)
                 }
-            } else if let image = camera.photo {
-                MealResultView(image: image) { camera.photo = nil; camera.start() }
             } else {
                 ZStack(alignment: .bottom) {
                     CameraPreview(session: camera.session).ignoresSafeArea(edges: .bottom)
@@ -447,7 +465,8 @@ private struct ScanView: View {
         .onDisappear { camera.stop() }
         .onChange(of: selectedPhoto) { _, item in
             Task {
-                guard let data = try? await item?.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
+                guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
+                camera.stop()
                 camera.photo = image
             }
         }
@@ -467,6 +486,7 @@ private struct MealResultView: View {
     @State private var fiber = 0.0
     @State private var mealType = MealEntry.MealType.lunch
     @State private var saved = false
+    @State private var showSavedAlert = false
     @State private var analyzing = false
     @State private var analysisError: String?
     @State private var analysisSource = ""
@@ -522,12 +542,13 @@ private struct MealResultView: View {
                     let diaryName = details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? name : "\(name) — \(details)"
                     diary.add(MealEntry(name: diaryName, grams: grams, caloriesPer100g: caloriesPer100g, protein: protein, carbs: carbs, fat: fat, fiber: fiber, mealType: mealType))
                     saved = true
-                }.disabled(saved || analyzing || name.isEmpty || caloriesPer100g <= 0)
+                    showSavedAlert = true
+                }.disabled(saved || analyzing || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || grams <= 0 || caloriesPer100g <= 0)
                 Button("Перезняти", role: .cancel, action: retake)
             } footer: { Text("Оцінку AI завжди можна скоригувати — порція з одного фото є приблизною.") }
         }
         .task { await analyzePhoto() }
-        .alert("Додано у щоденник", isPresented: $saved) { Button("OK") {} }
+        .alert("Додано у щоденник", isPresented: $showSavedAlert) { Button("OK") {} }
     }
 
     private func analyzePhoto() async {
@@ -600,6 +621,7 @@ private struct ManualEntryView: View {
             }
         }
         .navigationTitle("Додати вручну")
+        .onDisappear { voice.stop() }
         .onChange(of: voice.transcript) { _, value in if !value.isEmpty { name = value } }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Скасувати") { dismiss() } }
@@ -670,6 +692,7 @@ private struct ProgressViewScreen: View {
             }
         }
         .navigationTitle("Мій прогрес")
+        .onReceive(diary.objectWillChange) { _ in reportURL = nil }
         .sheet(item: $editingWeight) { record in
             WeightEditView(record: record)
         }
@@ -912,7 +935,7 @@ private enum FoodReport {
                 var y: CGFloat = 42
                 func draw(_ text: String, size: CGFloat = 12, bold: Bool = false) {
                     let font = bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size)
-                    text.draw(in: CGRect(x: 42, y: y, width: 511, height: 28), withAttributes: [.font: font, .foregroundColor: UIColor.label])
+                    text.draw(in: CGRect(x: 42, y: y, width: 511, height: 28), withAttributes: [.font: font, .foregroundColor: UIColor.black])
                     y += size + 10
                 }
                 draw("FoodLens — звіт про харчування", size: 22, bold: true)
@@ -923,7 +946,7 @@ private enum FoodReport {
                     if y > 790 { context.beginPage(); y = 42 }
                     draw("\(entry.date.formatted(date: .abbreviated, time: .shortened)) — \(entry.name): \(entry.calories) ккал")
                 }
-                if let latest = weights.first { y += 10; draw("Остання вага: \(latest.kilograms.formatted()) кг", bold: true) }
+                if let latest = weights.first { y += 10; if y > 790 { context.beginPage(); y = 42 }; draw("Остання вага: \(latest.kilograms.formatted()) кг", bold: true) }
             }
             return url
         } catch { return nil }

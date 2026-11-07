@@ -4,13 +4,16 @@ import uuid
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="FoodLens AI")
 
 
+MAX_IMAGE_BASE64_CHARS = 8_000_000  # ~6 МБ JPEG
+
+
 class AnalyzeRequest(BaseModel):
-    image_base64: str
+    image_base64: str = Field(min_length=1, max_length=MAX_IMAGE_BASE64_CHARS)
 
 
 SCHEMA = {
@@ -65,15 +68,24 @@ async def analyze(body: AnalyzeRequest):
         }],
         "text": {"format": {"type": "json_schema", "name": "food_analysis", "strict": True, "schema": SCHEMA}},
     }
-    async with httpx.AsyncClient(timeout=60) as client:
-        response = await client.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, json=payload)
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, json=payload)
+    except httpx.HTTPError as error:
+        raise HTTPException(504, f"Upstream request failed: {type(error).__name__}") from error
     if response.is_error:
-        raise HTTPException(response.status_code, response.text)
+        # Не передаємо клієнту сирий текст помилки постачальника.
+        raise HTTPException(502, f"Upstream error {response.status_code}")
     result = response.json()
     for item in result.get("output", []):
         for content in item.get("content", []):
+            if content.get("type") == "refusal":
+                raise HTTPException(422, "Model refused to analyze this image")
             if content.get("type") == "output_text":
-                parsed = json.loads(content["text"])
+                try:
+                    parsed = json.loads(content["text"])
+                except (KeyError, json.JSONDecodeError) as error:
+                    raise HTTPException(502, "Model returned invalid JSON") from error
                 for ingredient in parsed.get("ingredients", []):
                     ingredient["id"] = str(uuid.uuid4())
                 return parsed

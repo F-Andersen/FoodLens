@@ -102,6 +102,9 @@ struct NutritionProfile {
     var goal: Goal = .lose
     var diet: Diet = .balanced
 
+    /// Ключ для відстеження змін анкети (усі поля, що впливають на розрахунок).
+    var goalsKey: String { "\(sex.rawValue)|\(age)|\(heightCM)|\(weightKG)|\(activity.rawValue)|\(goal.rawValue)|\(diet.rawValue)" }
+
     var bmi: Double { weightKG / pow(heightCM / 100, 2) }
     var bmr: Double { 10 * weightKG + 6.25 * heightCM - 5 * Double(age) + (sex == .male ? 5 : -161) }
     var maintenanceCalories: Double { bmr * activity.factor }
@@ -226,7 +229,7 @@ enum PantryAssistant {
     private static func contains(_ ingredient: String, in pantry: String) -> Bool {
         let aliases: [String: [String]] = [
             "куряче філе": ["курка", "філе"], "кисломолочний сир": ["сир", "творог"],
-            "помідори": ["помідор", "томат"], "яйця": ["яйце"], "вівсянка": ["овес", "хлопці"],
+            "помідори": ["помідор", "томат"], "яйця": ["яйце"], "вівсянка": ["овес", "пластівці"],
             "риба": ["лосось", "хек", "тунець"], "картопля": ["картошка"]
         ]
         return pantry.contains(ingredient) || aliases[ingredient, default: []].contains { pantry.contains($0) }

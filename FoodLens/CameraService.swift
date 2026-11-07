@@ -13,15 +13,19 @@ final class CameraService: NSObject, ObservableObject {
 
     private let output = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "foodlens.camera.session")
+    // Змінюється лише на послідовній sessionQueue.
     private var isConfigured = false
 
     override init() { super.init() }
 
     func start() {
-        guard isConfigured else { requestAccessAndConfigure(); return }
         sessionQueue.async { [weak self] in
-            guard let self, !self.session.isRunning else { return }
-            self.session.startRunning()
+            guard let self else { return }
+            if self.isConfigured {
+                if !self.session.isRunning { self.session.startRunning() }
+                return
+            }
+            DispatchQueue.main.async { self.requestAccessAndConfigure() }
         }
     }
 
@@ -33,7 +37,11 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     func capture() {
-        output.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
+        sessionQueue.async { [weak self] in
+            guard let self, self.isConfigured, self.session.isRunning,
+                  self.output.connection(with: .video) != nil else { return }
+            self.output.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
+        }
     }
 
     private func requestAccessAndConfigure() {
@@ -52,20 +60,21 @@ final class CameraService: NSObject, ObservableObject {
 
     private func configure() {
         sessionQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.isConfigured else { return }
             self.session.beginConfiguration()
             self.session.sessionPreset = .photo
-            defer { self.session.commitConfiguration(); self.start() }
-
             guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                   let input = try? AVCaptureDeviceInput(device: camera),
                   self.session.canAddInput(input), self.session.canAddOutput(self.output) else {
+                self.session.commitConfiguration()
                 DispatchQueue.main.async { self.cameraUnavailable = true }
                 return
             }
             self.session.addInput(input)
             self.session.addOutput(self.output)
+            self.session.commitConfiguration()
             self.isConfigured = true
+            self.session.startRunning()
         }
     }
 }
@@ -148,17 +157,38 @@ final class VoiceEntryService: ObservableObject {
     }
 
     private func start() {
+        guard let recognizer, recognizer.isAvailable else { return }
         transcript = ""
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        self.request = request
+
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { return }
+
         let node = audioEngine.inputNode
         let format = node.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            return
+        }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        self.request = request
         node.removeTap(onBus: 0)
         node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer) }
         audioEngine.prepare()
-        try? audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            node.removeTap(onBus: 0)
+            self.request = nil
+            try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            return
+        }
         isRecording = true
-        task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
                 if let result { self?.transcript = result.bestTranscription.formattedString }
                 if error != nil || result?.isFinal == true { self?.stop() }
@@ -167,8 +197,15 @@ final class VoiceEntryService: ObservableObject {
     }
 
     func stop() {
-        audioEngine.stop(); audioEngine.inputNode.removeTap(onBus: 0)
-        request?.endAudio(); task?.cancel(); isRecording = false
+        guard isRecording else { return }
+        isRecording = false
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        request?.endAudio()
+        task?.cancel()
+        request = nil
+        task = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 
@@ -186,17 +223,29 @@ struct FoodAnalysis: Codable {
 
 enum FoodAIService {
     static func analyze(_ image: UIImage, backendURL: String) async throws -> FoodAnalysis {
-        guard let jpeg = image.jpegData(compressionQuality: 0.72),
-              let url = URL(string: backendURL.trimmingCharacters(in: .whitespacesAndNewlines))?.appendingPathComponent("analyze") else {
+        guard let url = endpoint(from: backendURL),
+              let jpeg = image.downscaled(maxSide: 1600).jpegData(compressionQuality: 0.72) else {
             throw URLError(.badURL)
         }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 75)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["image_base64": jpeg.base64EncodedString()])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(FoodAnalysis.self, from: data)
+    }
+
+    /// Приймає «192.168.1.20:8000», «http://host:8000/» тощо й повертає …/analyze.
+    static func endpoint(from raw: String) -> URL? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if !text.lowercased().hasPrefix("http://") && !text.lowercased().hasPrefix("https://") {
+            text = "http://" + text
+        }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard let base = URL(string: text), base.host != nil else { return nil }
+        return base.appendingPathComponent("analyze")
     }
 }
 
@@ -281,6 +330,16 @@ enum OnDeviceFoodRecognitionService {
 }
 
 private extension UIImage {
+    func downscaled(maxSide: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxSide else { return self }
+        let scale = maxSide / longest
+        let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
+
     var cgOrientation: CGImagePropertyOrientation {
         switch imageOrientation {
         case .up: .up

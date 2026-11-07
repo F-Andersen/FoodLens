@@ -6,6 +6,13 @@ FoodLens — нативний застосунок для iPhone українс�
 
 ## Можливості
 
+### Дизайн
+
+- Системна панель вкладок: на iOS 26+ це Liquid Glass, яка згортається під час прокручування.
+- Єдина дизайн-система в `Shared/Theme.swift`: кольори для світлої й темної теми, окремий колір для кожного макронутрієнта, відступи, кільце прогресу, смуги БЖВ.
+- Шрифти масштабуються з Dynamic Type, числа набрані округлим шрифтом із цифрами однакової ширини.
+- Онбординг при першому запуску: дані про користувача → розрахована норма. Пройти його знову можна з налаштувань.
+
 ### Сьогодні
 
 - Денний підсумок калорій і залишок до встановленої цілі.
@@ -102,11 +109,12 @@ API-ключ зберігається у змінній середовища с�
 ```text
 FoodLens/
 ├── App/                    # Точка входу, корінь навігації та вкладки
-├── Features/               # Екрани: Dashboard, Scan, Diary, Progress, Plan, Assistant, Settings
+├── Features/               # Екрани: Onboarding, Dashboard, Scan, Diary, Progress, Plan, Assistant, Settings
 ├── Models/                 # MealEntry, цілі, профіль, план меню, локальний асистент
 ├── Persistence/            # SwiftData-схема, DiaryStore, міграція даних v0.2
 ├── Services/               # Камера, Vision, AI-клієнт, HealthKit, диктування
-├── Shared/                 # Тема, спільні компоненти, PDF-звіт
+├── Shared/                 # Дизайн-система (кольори, відступи, компоненти), PDF-звіт
+├── Assets.xcassets         # Іконка застосунку (світла й темна) та AccentColor
 ├── PrivacyInfo.xcprivacy   # Privacy manifest для App Store
 └── FoodLens.entitlements   # HealthKit capability
 FoodLensTests/              # Модульні тести (Swift Testing)

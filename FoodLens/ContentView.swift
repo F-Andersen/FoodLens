@@ -452,10 +452,22 @@ private struct ScanView: View {
                     VStack(spacing: 12) {
                         Text("Зніміть всю тарілку зверху").padding(.horizontal, 14).padding(.vertical, 8)
                             .background(.black.opacity(0.55), in: Capsule()).foregroundStyle(.white)
-                        Button { camera.capture() } label: {
-                            Circle().fill(.white).frame(width: 72, height: 72)
-                                .overlay(Circle().stroke(.black.opacity(0.25), lineWidth: 3).padding(5))
-                        }.accessibilityLabel("Зробити фото")
+                        HStack {
+                            Spacer()
+                            Button { camera.capture() } label: {
+                                Circle().fill(.white).frame(width: 72, height: 72)
+                                    .overlay(Circle().stroke(.black.opacity(0.25), lineWidth: 3).padding(5))
+                            }.accessibilityLabel("Зробити фото")
+                            Spacer()
+                        }
+                        .overlay(alignment: .trailing) {
+                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                Image(systemName: "photo.on.rectangle").font(.title2).foregroundStyle(.white)
+                                    .frame(width: 52, height: 52).background(.black.opacity(0.45), in: Circle())
+                            }
+                            .accessibilityLabel("Вибрати фото з галереї")
+                            .padding(.trailing, 28)
+                        }
                     }.padding(.bottom, 24)
                 }
             }

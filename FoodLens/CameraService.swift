@@ -45,6 +45,11 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     private func requestAccessAndConfigure() {
+        #if targetEnvironment(simulator)
+        // У симуляторі немає справжньої камери: AVCapture лише сипле помилки Fig у консоль.
+        cameraUnavailable = true
+        return
+        #else
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configure()
@@ -56,6 +61,7 @@ final class CameraService: NSObject, ObservableObject {
         default:
             permissionDenied = true
         }
+        #endif
     }
 
     private func configure() {

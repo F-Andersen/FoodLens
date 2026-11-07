@@ -20,10 +20,7 @@ struct FoodAssistantView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Асистент харчування").font(.system(.largeTitle, design: .rounded, weight: .bold))
-                    Text("Рецепти з того, що вже є вдома").foregroundStyle(.secondary)
-                }
+                Text("Рецепти з того, що вже є вдома").foregroundStyle(.secondary).padding(.top, -Spacing.s)
                 HStack {
                     Label("Залишок", systemImage: "flame.fill")
                     Spacer()
@@ -59,7 +56,7 @@ struct FoodAssistantView: View {
             .padding()
         }
         .background(Theme.background)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Асистент")
         .sheet(item: $selectedRecipe) { recipe in
             NavigationStack { AssistantRecipeDetailView(recipe: recipe) }
         }

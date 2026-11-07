@@ -95,6 +95,13 @@ final class DiaryStore {
 
     var latestWeight: WeightRecord? { weights.first }
 
+    /// The saved profile (or defaults) with the most recently logged weight, so Progress and the calculator agree.
+    var profileWithLatestWeight: NutritionProfile {
+        var result = profile ?? NutritionProfile()
+        if let weight = latestWeight?.kilograms { result.weightKG = weight }
+        return result
+    }
+
     // MARK: Meals
 
     func add(_ entry: MealEntry) {

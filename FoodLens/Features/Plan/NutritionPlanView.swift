@@ -25,30 +25,13 @@ struct NutritionPlanView: View {
 
     var body: some View {
         Form {
-            Section("Ваші дані") {
-                Picker("Стать", selection: $profile.sex) { ForEach(NutritionProfile.Sex.allCases) { Text($0.title).tag($0) } }
-                Stepper("Вік: \(profile.age)", value: $profile.age, in: 18...90)
-                LabeledContent("Зріст") {
-                    TextField("см", value: $profile.heightCM, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 80)
-                    Text("см")
-                }
-                LabeledContent("Вага") {
-                    TextField("кг", value: $profile.weightKG, format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 80)
-                    Text("кг")
-                }
-                Picker("Активність", selection: $profile.activity) { ForEach(NutritionProfile.Activity.allCases) { Text($0.title).tag($0) } }
-                Picker("Мета", selection: $profile.goal) { ForEach(NutritionProfile.Goal.allCases) { Text($0.title).tag($0) } }
-                Picker("Тип раціону", selection: $profile.diet) { ForEach(NutritionProfile.Diet.allCases) { Text($0.title).tag($0) } }
-            }
+            ProfileFormSection(profile: $profile)
 
             if profile.isValid {
-                Section("Розрахована норма") {
+                Section {
+                    GoalsSummaryCard(goals: profile.calculatedGoals).padding(.vertical, Spacing.xs)
                     LabeledContent("Базовий обмін", value: "\(Int(profile.bmr)) ккал")
                     LabeledContent("Підтримка ваги", value: "\(Int(profile.maintenanceCalories)) ккал")
-                    LabeledContent("Ціль на день") { Text("\(Int(profile.targetCalories)) ккал").bold().foregroundStyle(Theme.accent) }
-                    LabeledContent("Білки", value: "\(Int(profile.calculatedGoals.protein)) г")
-                    LabeledContent("Жири", value: "\(Int(profile.calculatedGoals.fat)) г")
-                    LabeledContent("Вуглеводи", value: "\(Int(profile.calculatedGoals.carbs)) г")
                     LabeledContent("ІМТ", value: String(format: "%.1f — %@", profile.bmi, bmiDescription))
                     Button {
                         diary.goals = profile.calculatedGoals
@@ -59,16 +42,21 @@ struct NutritionPlanView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(goalsApplied)
+                } header: {
+                    Text("Розрахована норма")
                 }
 
                 Section("Приклад меню на день") {
                     ForEach(plan) { meal in
-                        VStack(alignment: .leading, spacing: 7) {
-                            HStack { Text(meal.mealType.title).font(.headline); Spacer(); Text("\(meal.calories) ккал").bold() }
-                            Text(meal.foods).foregroundStyle(.secondary)
-                            Text("Б \(meal.protein) г · Ж \(meal.fat) г · В \(meal.carbs) г").font(.caption).foregroundStyle(.secondary)
+                        HStack(alignment: .top, spacing: Spacing.m) {
+                            MealTypeBadge(type: meal.mealType, size: 32)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack { Text(meal.mealType.title).font(.headline); Spacer(); Text("\(meal.calories) ккал").bold() }
+                                Text(meal.foods).font(.subheadline).foregroundStyle(.secondary)
+                                Text("Б \(meal.protein) г · Ж \(meal.fat) г · В \(meal.carbs) г").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 2)
                     }
                     Button(planAdded ? "Меню додано" : "Додати це меню у щоденник") {
                         diary.add(plan.map { meal in
@@ -83,10 +71,6 @@ struct NutritionPlanView: View {
                     }
                     .disabled(planAdded)
                 }
-            } else {
-                Section {
-                    Text("Перевірте дані: зріст 120–230 см, вага 30–350 кг.").foregroundStyle(.orange)
-                }
             }
 
             Section {
@@ -94,7 +78,7 @@ struct NutritionPlanView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("План харчування")
+        .navigationTitle("Норма та меню")
         .onChange(of: profile) { _, newValue in
             diary.profile = newValue
             goalsApplied = false

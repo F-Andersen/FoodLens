@@ -18,68 +18,76 @@ enum AppTab: Int, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .today: "chart.pie.fill"
-        case .scan: "camera.fill"
+        case .scan: "camera.viewfinder"
         case .progress: "chart.xyaxis.line"
         case .assistant: "sparkles"
-        case .diary: "list.bullet"
+        case .diary: "book.pages.fill"
         }
     }
+}
+
+/// Opens the manual-entry sheet, optionally preset to a meal type.
+struct ManualEntryRequest: Identifiable {
+    let id = UUID()
+    var mealType: MealEntry.MealType
 }
 
 struct RootView: View {
     @Environment(DiaryStore.self) private var diary
-    @State private var showManualEntry = false
-    @State private var showSettings = false
+    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
     @State private var selectedTab = AppTab.today
+    @State private var showOnboarding = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        TabView(selection: $selectedTab) {
+            NavigationStack { DashboardView(selectedTab: $selectedTab) }
+                .tabItem { Label(AppTab.today.title, systemImage: AppTab.today.icon) }
+                .tag(AppTab.today)
+            NavigationStack { ScanView() }
+                .tabItem { Label(AppTab.scan.title, systemImage: AppTab.scan.icon) }
+                .tag(AppTab.scan)
+            NavigationStack { ProgressScreen() }
+                .tabItem { Label(AppTab.progress.title, systemImage: AppTab.progress.icon) }
+                .tag(AppTab.progress)
+            NavigationStack { FoodAssistantView() }
+                .tabItem { Label(AppTab.assistant.title, systemImage: AppTab.assistant.icon) }
+                .tag(AppTab.assistant)
+            NavigationStack { DiaryView() }
+                .tabItem { Label(AppTab.diary.title, systemImage: AppTab.diary.icon) }
+                .tag(AppTab.diary)
+        }
+        .modifier(MinimizingTabBar())
+        .safeAreaInset(edge: .top, spacing: 0) {
             if let issue = diary.storageIssue {
                 StorageIssueBanner(message: issue) { diary.dismissStorageIssue() }
             }
-            Group {
-                switch selectedTab {
-                case .today:
-                    NavigationStack { DashboardView(showManualEntry: $showManualEntry, showSettings: $showSettings) }
-                case .scan:
-                    NavigationStack { ScanView() }
-                case .progress:
-                    NavigationStack { ProgressScreen() }
-                case .assistant:
-                    NavigationStack { FoodAssistantView() }
-                case .diary:
-                    NavigationStack { DiaryView() }
-                }
-            }
-            .frame(maxHeight: .infinity)
-            HStack(spacing: 0) {
-                ForEach(AppTab.allCases) { tab in BottomTab(tab: tab, selected: $selectedTab) }
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-            .background(.regularMaterial)
-            .overlay(alignment: .top) { Divider().opacity(0.45) }
         }
-        .sheet(isPresented: $showManualEntry) { NavigationStack { ManualEntryView() } }
-        .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
+        .onAppear {
+            // Existing users who already set a profile skip onboarding.
+            if !onboardingCompleted && diary.profile == nil { showOnboarding = true }
+        }
+        .onChange(of: onboardingCompleted) { _, completed in
+            // "Пройти налаштування знову" in Settings resets the flag.
+            // Wait for the Settings sheet to finish dismissing before presenting.
+            guard !completed else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                showOnboarding = true
+            }
+        }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView { onboardingCompleted = true; showOnboarding = false }
+        }
     }
 }
 
-private struct BottomTab: View {
-    let tab: AppTab
-    @Binding var selected: AppTab
-
-    var body: some View {
-        Button { selected = tab } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tab.icon).font(.title3)
-                Text(tab.title).font(.caption2).lineLimit(1).minimumScaleFactor(0.75)
-            }
-            .foregroundStyle(selected == tab ? Theme.accent : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .contentShape(Rectangle())
+/// On iOS 26+ the Liquid Glass tab bar shrinks while scrolling down.
+private struct MinimizingTabBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected == tab ? .isSelected : [])
     }
 }

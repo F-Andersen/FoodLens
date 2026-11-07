@@ -3,41 +3,64 @@ import SwiftUI
 struct DiaryView: View {
     @Environment(DiaryStore.self) private var diary
     @State private var query = ""
+    @State private var manualEntry: ManualEntryRequest?
 
-    private var filtered: [MealEntry] {
-        query.isEmpty ? diary.entries : diary.entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    private var days: [DiaryDay] {
+        let entries = query.isEmpty ? diary.entries : diary.entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        return DiaryDay.group(entries)
     }
 
     var body: some View {
-        let entries = filtered
+        let days = days
         List {
-            if entries.isEmpty {
+            if days.isEmpty {
                 ContentUnavailableView(
                     query.isEmpty ? "Щоденник порожній" : "Нічого не знайдено",
-                    systemImage: "fork.knife",
-                    description: Text("Додайте страву зі сканера або вручну.")
+                    systemImage: query.isEmpty ? "book.pages" : "magnifyingglass",
+                    description: Text(query.isEmpty ? "Сфотографуйте страву або додайте її вручну." : "Спробуйте інший запит.")
                 )
-            } else {
-                ForEach(entries) { entry in
-                    NavigationLink {
-                        EditMealEntryView(entry: entry)
-                    } label: {
-                        MealRow(entry: entry)
-                    }
-                    .swipeActions(edge: .leading) {
-                        Button { diary.toggleFavorite(id: entry.id) } label: {
-                            Label("Обране", systemImage: entry.isFavorite ? "star.slash" : "star")
+                .listRowBackground(Color.clear)
+            }
+            ForEach(days) { day in
+                Section {
+                    ForEach(day.entries) { entry in
+                        NavigationLink {
+                            EditMealEntryView(entry: entry)
+                        } label: {
+                            MealRow(entry: entry)
                         }
-                        .tint(.yellow)
+                        .swipeActions(edge: .leading) {
+                            Button { diary.toggleFavorite(id: entry.id) } label: {
+                                Label(entry.isFavorite ? "Прибрати з обраного" : "В обране", systemImage: entry.isFavorite ? "star.slash" : "star")
+                            }
+                            .tint(.yellow)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { diary.deleteMeal(id: entry.id) } label: {
+                                Label("Видалити", systemImage: "trash")
+                            }
+                        }
                     }
-                }
-                .onDelete { offsets in
-                    for index in offsets { diary.deleteMeal(id: entries[index].id) }
+                } header: {
+                    HStack {
+                        Text(day.title())
+                        Spacer()
+                        Text("\(day.totals.kcal) ккал").monospacedDigit()
+                    }
                 }
             }
         }
         .searchable(text: $query, prompt: "Пошук у щоденнику")
         .navigationTitle("Щоденник")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { manualEntry = ManualEntryRequest(mealType: .suggested(for: .now)) } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Додати страву")
+            }
+        }
+        .sheet(item: $manualEntry) { request in
+            NavigationStack { ManualEntryView(mealType: request.mealType) }
+        }
     }
 }
 
@@ -136,51 +159,105 @@ struct ManualEntryView: View {
     @Environment(DiaryStore.self) private var diary
     @StateObject private var voice = VoiceEntryService()
     @State private var name = ""
-    @State private var calories = 300.0
-    @State private var grams = 250.0
-    @State private var protein = 15.0
-    @State private var carbs = 35.0
-    @State private var fat = 10.0
-    @State private var fiber = 3.0
-    @State private var mealType = MealEntry.MealType.suggested(for: .now)
+    @State private var calories = 0.0
+    @State private var grams = 0.0
+    @State private var protein = 0.0
+    @State private var carbs = 0.0
+    @State private var fat = 0.0
+    @State private var fiber = 0.0
+    @State private var mealType: MealEntry.MealType
+    @State private var savedTick = 0
+
+    init(mealType: MealEntry.MealType = .suggested(for: .now)) {
+        _mealType = State(initialValue: mealType)
+    }
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && calories >= 0 && grams >= 0
+    }
 
     var body: some View {
         Form {
-            Section("Страва") {
-                TextField("Наприклад: сирники", text: $name)
-                Button {
-                    Task { await voice.toggle() }
-                } label: {
-                    Label(voice.isRecording ? "Зупинити диктування" : "Описати голосом",
-                          systemImage: voice.isRecording ? "stop.circle.fill" : "mic.fill")
+            let favorites = diary.entries.uniqueFavorites
+            if !favorites.isEmpty {
+                Section("Обране") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Spacing.s) {
+                            ForEach(favorites.prefix(12)) { favorite in
+                                Button { fill(from: favorite) } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(favorite.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                                        Text("\(favorite.kcal) ккал").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, Spacing.m).padding(.vertical, Spacing.s)
+                                    .frame(maxWidth: 180, alignment: .leading)
+                                    .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .listRowInsets(EdgeInsets(top: Spacing.s, leading: Spacing.l, bottom: Spacing.s, trailing: Spacing.l))
                 }
-                if let error = voice.errorMessage { Text(error).font(.caption).foregroundStyle(.orange) }
-                Picker("Прийом їжі", selection: $mealType) { ForEach(MealEntry.MealType.allCases) { Text($0.title).tag($0) } }
-                NutritionSlider(title: "Вага", value: $grams, range: 10...1500, unit: "г")
-                NutritionSlider(title: "Калорії", value: $calories, range: 0...2000, unit: "ккал")
             }
-            Section("Макронутрієнти") {
-                NutritionSlider(title: "Білки", value: $protein, range: 0...200, unit: "г")
-                NutritionSlider(title: "Вуглеводи", value: $carbs, range: 0...300, unit: "г")
-                NutritionSlider(title: "Жири", value: $fat, range: 0...200, unit: "г")
-                NutritionSlider(title: "Клітковина", value: $fiber, range: 0...60, unit: "г")
+            Section("Страва") {
+                HStack {
+                    TextField("Наприклад: сирники зі сметаною", text: $name, axis: .vertical)
+                    Button {
+                        Task { await voice.toggle() }
+                    } label: {
+                        Image(systemName: voice.isRecording ? "stop.circle.fill" : "mic.fill")
+                            .font(.title3)
+                            .foregroundStyle(voice.isRecording ? .red : Theme.accent)
+                            .symbolEffect(.pulse, isActive: voice.isRecording)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(voice.isRecording ? "Зупинити диктування" : "Описати голосом")
+                }
+                if let error = voice.errorMessage { Text(error).font(.caption).foregroundStyle(Theme.warning) }
+                Picker("Прийом їжі", selection: $mealType) {
+                    ForEach(MealEntry.MealType.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
+                }
+            }
+            Section {
+                NumberFieldRow(title: "Калорії", value: $calories, unit: "ккал")
+                NumberFieldRow(title: "Вага порції", value: $grams, unit: "г")
+            } header: {
+                Text("Порція")
+            } footer: {
+                Text("Якщо вага невідома, залиште 0.")
+            }
+            Section("БЖВ") {
+                NumberFieldRow(title: Macro.protein.title, value: $protein, unit: "г")
+                NumberFieldRow(title: Macro.fat.title, value: $fat, unit: "г")
+                NumberFieldRow(title: Macro.carbs.title, value: $carbs, unit: "г")
+                NumberFieldRow(title: Macro.fiber.title, value: $fiber, unit: "г")
             }
         }
-        .navigationTitle("Додати вручну")
+        .navigationTitle("Додати страву")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: voice.transcript) { _, value in if !value.isEmpty { name = value } }
         .onDisappear { voice.stop() }
+        .sensoryFeedback(.success, trigger: savedTick)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Скасувати") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Зберегти") {
-                    diary.add(MealEntry(
-                        name: name.trimmingCharacters(in: .whitespacesAndNewlines), grams: grams, calories: calories,
-                        protein: protein, carbs: carbs, fat: fat, fiber: fiber, mealType: mealType
-                    ))
-                    dismiss()
-                }
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Зберегти", action: save).disabled(!canSave)
             }
         }
+    }
+
+    private func fill(from entry: MealEntry) {
+        name = entry.name; calories = entry.calories.rounded(); grams = entry.grams
+        protein = entry.protein; carbs = entry.carbs; fat = entry.fat; fiber = entry.fiber
+    }
+
+    private func save() {
+        diary.add(MealEntry(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines), grams: grams, calories: calories,
+            protein: protein, carbs: carbs, fat: fat, fiber: fiber, mealType: mealType
+        ))
+        savedTick += 1
+        dismiss()
     }
 }

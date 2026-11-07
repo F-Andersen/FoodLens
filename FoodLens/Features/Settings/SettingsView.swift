@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(DiaryStore.self) private var diary
     @AppStorage("backendURL") private var backendURL = ""
+    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     private var backendURLIsValid: Bool {
         backendURL.trimmingCharacters(in: .whitespaces).isEmpty || (try? FoodAIService.endpoint(from: backendURL)) != nil
@@ -12,6 +13,19 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var diary = diary
         Form {
+            Section {
+                NavigationLink {
+                    NutritionPlanView(initialProfile: diary.profileWithLatestWeight)
+                } label: {
+                    Label("Профіль і норма", systemImage: "person.crop.circle")
+                }
+                Button {
+                    dismiss()
+                    onboardingCompleted = false
+                } label: {
+                    Label("Пройти налаштування знову", systemImage: "arrow.counterclockwise")
+                }
+            }
             Section {
                 TextField("https://foodlens.example.com", text: $backendURL)
                     .textInputAutocapitalization(.never)

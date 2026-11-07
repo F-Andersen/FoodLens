@@ -2,186 +2,282 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(DiaryStore.self) private var diary
-    @Binding var showManualEntry: Bool
-    @Binding var showSettings: Bool
+    @Binding var selectedTab: AppTab
     @StateObject private var health = HealthService()
+    @State private var manualEntry: ManualEntryRequest?
+    @State private var showSettings = false
     @State private var showNutritionPlan = false
+    @State private var waterTick = 0
 
     var body: some View {
         let totals = diary.todayTotals
         ScrollView {
-            VStack(spacing: 16) {
-                header
-                calorieCard(totals)
-                Button { showNutritionPlan = true } label: {
-                    HStack {
-                        Label("Розрахувати норму та меню", systemImage: "fork.knife.circle.fill").font(.headline)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }
-                    .cardStyle()
-                }
-                .buttonStyle(.plain)
-                macroGrid(totals)
+            VStack(alignment: .leading, spacing: Spacing.l) {
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).capitalizedFirstLetter)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Spacing.xs)
+                    .padding(.top, -Spacing.s)
+                summaryCard(totals)
+                if diary.profile == nil { setupPrompt }
+                quickActions
                 waterCard
-                activityCard
-                todayMeals
+                meals
+                planLink
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.bottom, Spacing.xl)
         }
         .background(Theme.background)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Сьогодні")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
                     .accessibilityLabel("Налаштування")
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { manualEntry = ManualEntryRequest(mealType: .suggested(for: .now)) } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Додати страву")
+            }
         }
         .task { await health.requestAndLoad() }
         .navigationDestination(isPresented: $showNutritionPlan) {
-            NutritionPlanView(initialProfile: initialProfile)
+            NutritionPlanView(initialProfile: diary.profileWithLatestWeight)
         }
+        .sheet(item: $manualEntry) { request in
+            NavigationStack { ManualEntryView(mealType: request.mealType) }
+        }
+        .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
+        .sensoryFeedback(.increase, trigger: waterTick)
     }
 
-    /// The saved profile, with the latest weight from Progress so the two never disagree.
-    private var initialProfile: NutritionProfile {
-        var profile = diary.profile ?? NutritionProfile()
-        if let weight = diary.latestWeight?.kilograms { profile.weightKG = weight }
-        return profile
-    }
+    // MARK: Summary
 
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Сьогодні").font(.system(.largeTitle, design: .rounded, weight: .bold))
-                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                    .font(.subheadline).foregroundStyle(.secondary)
+    private func summaryCard(_ totals: NutritionTotals) -> some View {
+        let goal = diary.goals.calories
+        let remaining = Int(goal.rounded()) - totals.kcal
+        return VStack(spacing: Spacing.l) {
+            HStack(spacing: Spacing.l) {
+                ProgressRing(value: totals.calories, goal: goal) {
+                    VStack(spacing: 0) {
+                        Text("\(abs(remaining))")
+                            .numberFont(.title, weight: .bold)
+                            .contentTransition(.numericText(value: Double(remaining)))
+                            .animation(.smooth, value: remaining)
+                            .minimumScaleFactor(0.6)
+                        Text(remaining >= 0 ? "залишилось" : "понад норму")
+                            .font(.caption)
+                            .foregroundStyle(remaining >= 0 ? Color.secondary : Theme.warning)
+                    }
+                    .padding(.horizontal, Spacing.s)
+                }
+                .frame(width: 136, height: 136)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Калорії")
+                .accessibilityValue(remaining >= 0 ? "Залишилось \(remaining) ккал" : "Понад норму на \(-remaining) ккал")
+
+                VStack(alignment: .leading, spacing: Spacing.m) {
+                    StatLine(icon: "flag.checkered", tint: .secondary, title: "Ціль", value: Int(goal.rounded()))
+                    StatLine(icon: "fork.knife", tint: Theme.accent, title: "Спожито", value: totals.kcal)
+                    StatLine(icon: "flame.fill", tint: .orange, title: "Активність", value: health.activeCalories)
+                    if health.steps > 0 {
+                        Label("\(health.steps) кроків", systemImage: "figure.walk")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Spacer()
-            Button { showManualEntry = true } label: {
-                ZStack {
-                    Circle().fill(Theme.accent).frame(width: 50, height: 50)
-                    Image(systemName: "plus").font(.title2.bold()).foregroundStyle(.white)
+            Divider()
+            VStack(spacing: Spacing.m) {
+                ForEach(Macro.allCases) { macro in
+                    MacroBar(macro: macro, value: macro.value(in: totals), goal: macro.goal(in: diary.goals))
                 }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Додати страву вручну")
+        }
+        .cardStyle()
+    }
+
+    private var setupPrompt: some View {
+        Button { showNutritionPlan = true } label: {
+            HStack(spacing: Spacing.m) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.title2).foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Розрахуйте свою норму").font(.headline)
+                    Text("Зараз використовується стандартна ціль 2 000 ккал").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            .cardStyle()
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Quick actions
+
+    private var quickActions: some View {
+        HStack(spacing: Spacing.m) {
+            QuickAction(title: "Сфотографувати", icon: "camera.fill", tint: Theme.accent) { selectedTab = .scan }
+            QuickAction(title: "Додати вручну", icon: "square.and.pencil", tint: Macro.protein.color) {
+                manualEntry = ManualEntryRequest(mealType: .suggested(for: .now))
+            }
         }
     }
 
-    private func calorieCard(_ totals: NutritionTotals) -> some View {
-        let goal = Int(diary.goals.calories.rounded())
-        let remaining = goal - totals.kcal
-        return VStack(spacing: 14) {
-            HStack {
-                Label("Денна енергія", systemImage: "flame.fill")
-                Spacer()
-                Text(remaining >= 0 ? "Залишилось \(remaining) ккал" : "Понад норму на \(-remaining) ккал")
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.9))
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(totals.kcal)").font(.system(size: 46, weight: .bold, design: .rounded))
-                Text("/ \(goal) ккал").foregroundStyle(.white.opacity(0.78))
-                Spacer()
-            }
-            .foregroundStyle(.white)
-            ProgressView(value: progress(totals.calories, of: diary.goals.calories))
-                .tint(.white)
-        }
-        .padding(20)
-        .background(Theme.calorieGradient, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: Theme.accent.opacity(0.22), radius: 18, y: 9)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func macroGrid(_ totals: NutritionTotals) -> some View {
-        Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-            GridRow {
-                MacroTile(title: "Білки", icon: "fish.fill", value: totals.protein, goal: diary.goals.protein, color: .blue)
-                MacroTile(title: "Вуглеводи", icon: "bolt.fill", value: totals.carbs, goal: diary.goals.carbs, color: .orange)
-            }
-            GridRow {
-                MacroTile(title: "Жири", icon: "drop.fill", value: totals.fat, goal: diary.goals.fat, color: .purple)
-                MacroTile(title: "Клітковина", icon: "leaf.fill", value: totals.fiber, goal: diary.goals.fiber, color: .green)
-            }
-        }
-    }
+    // MARK: Water
 
     private var waterCard: some View {
         let water = diary.waterToday
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: Spacing.m) {
             HStack {
-                Label("Вода", systemImage: "drop.fill").foregroundStyle(.blue)
+                Label("Вода", systemImage: "drop.fill").font(.headline).foregroundStyle(Theme.water)
                 Spacer()
-                Text("\(Int(water)) / \(Int(diary.goals.waterML)) мл").bold()
+                Text("\(Text("\(Int(water))").number(.headline)) / \(Int(diary.goals.waterML)) мл")
+                    .font(.subheadline).foregroundStyle(.secondary)
             }
-            ProgressView(value: progress(water, of: diary.goals.waterML)).tint(.blue)
-            HStack {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.track)
+                    Capsule().fill(Theme.water.gradient)
+                        .frame(width: proxy.size.width * progress(water, of: diary.goals.waterML))
+                        .animation(.smooth, value: water)
+                }
+            }
+            .frame(height: 10)
+            .accessibilityHidden(true)
+            HStack(spacing: Spacing.s) {
                 ForEach([200.0, 300.0, 500.0], id: \.self) { amount in
-                    Button("+\(Int(amount))") { diary.addWater(amount) }.buttonStyle(.bordered)
+                    Button("+\(Int(amount))") {
+                        diary.addWater(amount)
+                        waterTick += 1
+                    }
+                    .accessibilityLabel("Додати \(Int(amount)) мілілітрів")
                 }
                 Spacer()
                 if water > 0 {
                     Button { diary.undoLastWater() } label: { Image(systemName: "arrow.uturn.backward") }
-                        .buttonStyle(.bordered)
                         .tint(.secondary)
                         .accessibilityLabel("Скасувати останнє додавання води")
                 }
             }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(Theme.water)
         }
         .cardStyle()
     }
 
-    private var activityCard: some View {
-        HStack {
-            Label("\(health.steps) кроків", systemImage: "figure.walk").foregroundStyle(.green)
-            Spacer()
-            Label("\(health.activeCalories) ккал", systemImage: "bolt.heart.fill").foregroundStyle(.orange)
+    // MARK: Meals
+
+    private var meals: some View {
+        let todayEntries = diary.todayEntries
+        return VStack(alignment: .leading, spacing: Spacing.m) {
+            SectionTitle(title: "Прийоми їжі", trailing: todayEntries.isEmpty ? nil : "\(todayEntries.count) записів")
+            ForEach(MealEntry.MealType.allCases) { type in
+                MealSectionCard(
+                    type: type,
+                    entries: todayEntries.filter { $0.mealType == type }.sorted { $0.date < $1.date },
+                    add: { manualEntry = ManualEntryRequest(mealType: type) }
+                )
+            }
         }
-        .font(.headline)
-        .cardStyle()
     }
 
-    private var todayMeals: some View {
-        let meals = diary.todayEntries
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Страви за день").font(.headline)
+    private var planLink: some View {
+        Button { showNutritionPlan = true } label: {
+            HStack(spacing: Spacing.m) {
+                Image(systemName: "list.bullet.clipboard.fill").font(.title3).foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Норма та меню на день").font(.headline)
+                    Text("Перерахувати ціль або додати готове меню").font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
-                Text("\(meals.count) записів").foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
             }
-            if meals.isEmpty {
-                Text("Сфотографуйте або додайте першу страву")
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical)
-            } else {
-                ForEach(meals.prefix(5)) { entry in MealRow(entry: entry) }
-            }
+            .cardStyle()
         }
-        .cardStyle()
+        .buttonStyle(.plain)
     }
 }
 
-private struct MacroTile: View {
-    let title: String
+private struct StatLine: View {
     let icon: String
-    let value: Double
-    let goal: Double
-    let color: Color
+    let tint: Color
+    let title: String
+    let value: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon).foregroundStyle(color)
-                Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+        HStack(spacing: Spacing.s) {
+            Image(systemName: icon).font(.footnote).foregroundStyle(tint).frame(width: 18)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text("\(Text("\(value)").number(.headline)) ккал").font(.caption).foregroundStyle(.secondary)
             }
-            Text("\(Int(value)) / \(Int(goal)) г").font(.headline)
-            ProgressView(value: progress(value, of: goal)).tint(color)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(color.opacity(0.10)) }
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct QuickAction: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 40, height: 40)
+                    .background(tint.opacity(0.14), in: Circle())
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+            }
+            .cardStyle()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct MealSectionCard: View {
+    let type: MealEntry.MealType
+    let entries: [MealEntry]
+    let add: () -> Void
+
+    private var kcal: Int { NutritionTotals(entries: entries).kcal }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            HStack(spacing: Spacing.m) {
+                MealTypeBadge(type: type)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(type.title).font(.headline)
+                    Text(entries.isEmpty ? "Ще нічого не додано" : "\(kcal) ккал")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: add) {
+                    Image(systemName: "plus").font(.subheadline.weight(.bold))
+                        .frame(width: 32, height: 32)
+                        .background(Theme.accentSoft, in: Circle())
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Додати до: \(type.title)")
+            }
+            ForEach(entries) { entry in
+                NavigationLink {
+                    EditMealEntryView(entry: entry)
+                } label: {
+                    MealRow(entry: entry, showsBadge: false)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .cardStyle()
     }
 }

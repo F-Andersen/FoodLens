@@ -2,12 +2,12 @@ import SwiftUI
 
 @main
 struct FoodLensApp: App {
-    @StateObject private var diary = DiaryStore()
+    @State private var diary = DiaryStore.makeDefault()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(diary)
+            RootView()
+                .environment(diary)
                 .tint(Theme.accent)
         }
     }

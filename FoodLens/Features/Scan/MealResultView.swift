@@ -97,9 +97,9 @@ struct MealResultView: View {
         analyzing = true
         defer { analyzing = false }
         analysisError = nil
-        if !backendURL.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let baseURL = AppConfig.apiBaseURL(override: backendURL) {
             do {
-                apply(try await FoodAIService.analyze(image, backendURL: backendURL), source: "AI-сервер")
+                apply(try await FoodLensAPI.shared.analyze(image, baseURL: baseURL), source: "AI-сервер")
                 return
             } catch {
                 analysisError = "\(error.localizedDescription) Використано аналіз на iPhone."

@@ -15,6 +15,7 @@ struct AssistantRecipe: Identifiable, Sendable {
     var steps: String
     var calories: Int
     var protein: Int
+    var minutes: Int? = nil
 }
 
 struct AssistantResult: Sendable {

@@ -5,9 +5,26 @@ struct SettingsView: View {
     @Environment(DiaryStore.self) private var diary
     @AppStorage("backendURL") private var backendURL = ""
     @AppStorage("onboardingCompleted") private var onboardingCompleted = false
+    @State private var connection: ConnectionState = .idle
+
+    private enum ConnectionState: Equatable { case idle, checking, ok, failed(String) }
 
     private var backendURLIsValid: Bool {
-        backendURL.trimmingCharacters(in: .whitespaces).isEmpty || (try? FoodAIService.endpoint(from: backendURL)) != nil
+        backendURL.trimmingCharacters(in: .whitespaces).isEmpty
+            || (try? FoodLensAPI.endpoint(base: backendURL, path: "health")) != nil
+    }
+
+    private var activeServer: String? { AppConfig.apiBaseURL(override: backendURL) }
+
+    private func checkConnection() async {
+        guard let server = activeServer else { return }
+        connection = .checking
+        do {
+            try await FoodLensAPI.shared.checkHealth(baseURL: server)
+            connection = .ok
+        } catch {
+            connection = .failed(error.localizedDescription)
+        }
     }
 
     var body: some View {
@@ -27,17 +44,40 @@ struct SettingsView: View {
                 }
             }
             Section {
-                TextField("https://foodlens.example.com", text: $backendURL)
+                LabeledContent("Режим", value: activeServer == nil ? "Аналіз на iPhone" : "AI-сервер")
+                TextField(AppConfig.defaultAPIBaseURL.isEmpty ? "https://api.foodlens.example" : AppConfig.defaultAPIBaseURL,
+                          text: $backendURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                    .onChange(of: backendURL) { _, _ in connection = .idle }
                 if !backendURLIsValid {
                     Text("Адреса має починатися з http:// або https://").font(.caption).foregroundStyle(.red)
+                }
+                if activeServer != nil {
+                    Button {
+                        Task { await checkConnection() }
+                    } label: {
+                        HStack {
+                            Text("Перевірити з'єднання")
+                            Spacer()
+                            switch connection {
+                            case .idle: EmptyView()
+                            case .checking: ProgressView()
+                            case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.accent)
+                            case .failed: Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    .disabled(connection == .checking || !backendURLIsValid)
+                    if case .failed(let message) = connection {
+                        Text(message).font(.caption).foregroundStyle(.red)
+                    }
                 }
             } header: {
                 Text("AI-сервер")
             } footer: {
-                Text("API-ключ зберігається на сервері, а не в застосунку. Без адреси фото аналізується на iPhone.")
+                Text("API-ключ зберігається на сервері, а не в застосунку. Поле адреси потрібне лише для власного або тестового сервера; без сервера фото аналізується на iPhone.")
             }
             Section("Денні цілі") {
                 Stepper("Калорії: \(Int(diary.goals.calories))", value: $diary.goals.calories, in: 1000...5000, step: 50)

@@ -4,17 +4,52 @@ struct FoodAssistantView: View {
     @Environment(DiaryStore.self) private var diary
     @AppStorage("assistantPantry") private var pantry = ""
     @AppStorage("assistantMealFilterV2") private var mealFilter = ""
-    @AppStorage("assistantHasGenerated") private var hasGenerated = false
+    @AppStorage("assistantAvoid") private var avoid = ""
+    @AppStorage("backendURL") private var backendURL = ""
     @State private var selectedRecipe: AssistantRecipe?
+    @State private var result: AssistantResult?
+    @State private var resultIsFromAI = false
+    @State private var loading = false
+    @State private var notice: String?
 
     private var selectedMealType: MealEntry.MealType? { MealEntry.MealType(rawValue: mealFilter) }
     private var caloriesLeft: Int { max(0, Int(diary.goals.calories) - diary.todayTotals.kcal) }
     private var proteinLeft: Int { max(0, Int(diary.goals.protein - diary.todayTotals.protein)) }
     private var pantryIsEmpty: Bool { pantry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    private var result: AssistantResult? {
-        guard hasGenerated, !pantryIsEmpty else { return nil }
-        return PantryAssistant.suggest(pantryText: pantry, mealType: selectedMealType, caloriesLeft: caloriesLeft, proteinLeft: proteinLeft)
+    /// "курка, гречка\nпомідори" → ["курка", "гречка", "помідори"]
+    nonisolated static func items(from text: String) -> [String] {
+        text.split(whereSeparator: { $0 == "," || $0 == "\n" || $0 == ";" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func generate() async {
+        loading = true
+        notice = nil
+        defer { loading = false }
+        let local = PantryAssistant.suggest(pantryText: pantry, mealType: selectedMealType, caloriesLeft: caloriesLeft, proteinLeft: proteinLeft)
+        guard let baseURL = AppConfig.apiBaseURL(override: backendURL) else {
+            result = local
+            resultIsFromAI = false
+            return
+        }
+        let query = RecipeQuery(
+            pantry: Array(Self.items(from: pantry).prefix(50)),
+            mealType: selectedMealType?.rawValue,
+            caloriesLeft: caloriesLeft,
+            proteinLeft: proteinLeft,
+            diet: (diary.profile?.diet ?? .balanced).rawValue,
+            avoid: Array(Self.items(from: avoid).prefix(20))
+        )
+        do {
+            result = try await FoodLensAPI.shared.recipes(query, baseURL: baseURL).assistantResult
+            resultIsFromAI = true
+        } catch {
+            result = local
+            resultIsFromAI = false
+            notice = "\(error.localizedDescription) Показано рецепти з вбудованого каталогу."
+        }
     }
 
     var body: some View {
@@ -36,21 +71,33 @@ struct FoodAssistantView: View {
                         .padding(8)
                         .scrollContentBackground(.hidden)
                         .background(Theme.background, in: RoundedRectangle(cornerRadius: 14))
+                    TextField("Не використовувати: горіхи, молоко…", text: $avoid)
+                        .textInputAutocapitalization(.never)
+                        .padding(10)
+                        .background(Theme.background, in: RoundedRectangle(cornerRadius: 14))
                     Picker("Прийом їжі", selection: $mealFilter) {
                         Text("Увесь день").tag("")
                         ForEach(MealEntry.MealType.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                     .pickerStyle(.menu)
                     Button {
-                        hasGenerated = true
+                        Task { await generate() }
                     } label: {
-                        Label("Запропонувати рецепти", systemImage: "sparkles").frame(maxWidth: .infinity)
+                        HStack {
+                            if loading { ProgressView().tint(.white) } else { Image(systemName: "sparkles") }
+                            Text(loading ? "Підбираємо рецепти…" : "Запропонувати рецепти")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(pantryIsEmpty)
+                    .disabled(pantryIsEmpty || loading)
                 }
                 .cardStyle()
 
+                if let notice {
+                    Label(notice, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote).foregroundStyle(Theme.warning)
+                }
                 if let result { resultView(result) }
             }
             .padding()
@@ -66,7 +113,13 @@ struct FoodAssistantView: View {
     private func resultView(_ result: AssistantResult) -> some View {
         Text(result.message).font(.callout).padding(14)
             .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
-        Text("Що приготувати").font(.title2.bold())
+        HStack(alignment: .firstTextBaseline) {
+            Text("Що приготувати").font(.title2.bold())
+            Spacer()
+            Label(resultIsFromAI ? "AI" : "Каталог", systemImage: resultIsFromAI ? "sparkles" : "book.closed")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(resultIsFromAI ? Theme.accent : .secondary)
+        }
         ForEach(result.recipes) { recipe in
             Button { selectedRecipe = recipe } label: {
                 VStack(alignment: .leading, spacing: 8) {
@@ -82,7 +135,11 @@ struct FoodAssistantView: View {
                     }
                     Text(recipe.ingredients.map { "\($0.name) \($0.grams) г" }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    Label("\(recipe.protein) г білка", systemImage: "bolt.heart.fill").font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: Spacing.m) {
+                        Label("\(recipe.protein) г білка", systemImage: "bolt.heart.fill")
+                        if let minutes = recipe.minutes { Label("\(minutes) хв", systemImage: "clock") }
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 .cardStyle()
             }

@@ -39,18 +39,23 @@ struct RecognitionMatchingTests {
 @Suite("AI service")
 struct FoodAIServiceTests {
     @Test(arguments: [
-        ("https://api.example.com", "https://api.example.com/analyze"),
-        ("https://api.example.com/", "https://api.example.com/analyze"),
-        ("http://192.168.1.20:8000", "http://192.168.1.20:8000/analyze"),
-        (" https://api.example.com/v1/analyze ", "https://api.example.com/v1/analyze")
+        ("https://api.example.com", "https://api.example.com/v1/analyze"),
+        ("https://api.example.com/", "https://api.example.com/v1/analyze"),
+        ("http://192.168.1.20:8000", "http://192.168.1.20:8000/v1/analyze"),
+        (" https://example.com/foodlens/ ", "https://example.com/foodlens/v1/analyze")
     ])
     func buildsEndpoint(base: String, expected: String) throws {
-        #expect(try FoodAIService.endpoint(from: base).absoluteString == expected)
+        #expect(try FoodLensAPI.endpoint(base: base, path: "v1/analyze").absoluteString == expected)
     }
 
     @Test(arguments: ["", "api.example.com", "ftp://example.com", "https://"])
     func rejectsInvalidAddresses(base: String) {
-        #expect(throws: FoodAIError.invalidServerURL) { try FoodAIService.endpoint(from: base) }
+        #expect(throws: FoodAIError.invalidServerURL) { try FoodLensAPI.endpoint(base: base, path: "health") }
+    }
+
+    @Test func resolvesBaseURLFromOverrideThenDefault() {
+        #expect(AppConfig.apiBaseURL(override: " https://dev.example ") == "https://dev.example")
+        #expect(AppConfig.apiBaseURL(override: "") == (AppConfig.defaultAPIBaseURL.isEmpty ? nil : AppConfig.defaultAPIBaseURL))
     }
 
     @Test func decodesServerResponseWithNonUUIDIngredientIds() throws {

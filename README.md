@@ -82,9 +82,15 @@ Apple Vision класифікує зображення через `VNClassifyIma
 
 ### Серверний режим
 
-За заповненого URL застосунок надсилає JPEG у Base64 на `POST /analyze`. Сервер звертається до зовнішньої моделі та повертає назву, оцінку порції, калорійність, БЖВ, впевненість і склад.
+Застосунок працює з сервером, якщо адреса задана в `AppConfig.defaultAPIBaseURL` або вказана в налаштуваннях. Як це відбувається:
 
-API-ключ зберігається у змінній середовища сервера. У разі помилки застосунок пробує локальний Vision і показує повідомлення про зміну режиму. Інструкція: [backend/README.md](backend/README.md).
+1. При першому зверненні застосунок реєструє встановлення й зберігає токен у Keychain. Якщо сервер відхиляє токен, застосунок автоматично реєструється знову.
+2. Фото зменшується до 1280 px і надсилається на `POST /v1/analyze`.
+3. Сервер звертається до Claude або OpenAI (обирається змінною `AI_PROVIDER`) і повертає перевірену оцінку страви з інгредієнтами.
+
+Асистент так само отримує рецепти через `POST /v1/recipes`. Сервер враховує продукти в холодильнику, залишок калорій і білка, тип раціону та продукти, які треба виключити.
+
+API-ключі є лише на сервері. Якщо сервер недоступний, застосунок переходить на Vision або вбудований каталог рецептів і показує зрозуміле повідомлення. Перевірити з'єднання можна в налаштуваннях. Деталі, ліміти й розгортання на VPS описано в [backend/README.md](backend/README.md).
 
 ## Технології
 
@@ -100,7 +106,7 @@ API-ключ зберігається у змінній середовища с�
 | Мережа | URLSession, async/await |
 | PDF | UIGraphicsPDFRenderer, UIActivityViewController |
 | Тести | Swift Testing (`FoodLensTests`) |
-| Сервер | Python, FastAPI, Pydantic, HTTPX, Uvicorn |
+| Сервер | Python 3.12, FastAPI, Pydantic, Anthropic SDK, HTTPX, Uvicorn, Docker, Caddy |
 
 Мінімальна ціль — **iOS 17.0**. Проєкт компілюється в режимі **Swift 6** зі строгою перевіркою конкурентності. Групи файлів синхронізуються з папками (Xcode 16+): нові файли в `FoodLens/` і `FoodLensTests/` потрапляють у таргет без редагування `project.pbxproj`. Зовнішніх Swift Package залежностей немає.
 
@@ -112,14 +118,15 @@ FoodLens/
 ├── Features/               # Екрани: Onboarding, Dashboard, Scan, Diary, Progress, Plan, Assistant, Settings
 ├── Models/                 # MealEntry, цілі, профіль, план меню, локальний асистент
 ├── Persistence/            # SwiftData-схема, DiaryStore, міграція даних v0.2
-├── Services/               # Камера, Vision, AI-клієнт, HealthKit, диктування
+├── Services/               # Камера, Vision, клієнт API (токен у Keychain), HealthKit, диктування
 ├── Shared/                 # Дизайн-система (кольори, відступи, компоненти), PDF-звіт
 ├── Assets.xcassets         # Іконка застосунку (світла й темна) та AccentColor
 ├── PrivacyInfo.xcprivacy   # Privacy manifest для App Store
 └── FoodLens.entitlements   # HealthKit capability
 FoodLensTests/              # Модульні тести (Swift Testing)
 FoodLens.xcodeproj/         # Xcode-проєкт і спільна схема FoodLens
-backend/                    # FastAPI-сервер аналізу фото
+backend/                    # FastAPI: аналіз фото, рецепти, токени, ліміти, Docker + Caddy
+.github/workflows/          # CI: тести бекенду та збірка Docker-образу
 ```
 
 ## Запуск застосунку
@@ -142,7 +149,7 @@ xcodebuild -project FoodLens.xcodeproj \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-Сервер необов’язковий. Після його запуску вкажіть базовий URL у «Сьогодні» → налаштування → «AI-сервер».
+Сервер необов’язковий. Для розробки запустіть його локально в Docker з `AI_PROVIDER=mock` і вкажіть `http://localhost:8000` у «Сьогодні» → налаштування → «AI-сервер». Для релізу розгорніть його на VPS і впишіть адресу в `AppConfig.defaultAPIBaseURL`.
 
 ## Збереження та приватність
 

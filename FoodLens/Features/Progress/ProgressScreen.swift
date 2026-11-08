@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ProgressScreen: View {
     @Environment(DiaryStore.self) private var diary
+    @Environment(HealthService.self) private var health
+    @State private var activityMetric = ActivityMetric.steps
     @State private var weightText = ""
     @State private var editingWeight: WeightRecord?
     @State private var report: ReportFile?
@@ -24,6 +26,7 @@ struct ProgressScreen: View {
                 }
                 .frame(height: 190)
             }
+            activitySection
             Section("Вага") {
                 if let latest = diary.latestWeight {
                     LabeledContent("Поточна вага", value: "\(latest.kilograms.formatted(.number.precision(.fractionLength(0...1)))) кг")
@@ -72,6 +75,8 @@ struct ProgressScreen: View {
             }
         }
         .navigationTitle("Мій прогрес")
+        .task { if health.lastUpdated == nil { await health.refresh() } }
+        .refreshable { await health.refresh() }
         .sheet(item: $editingWeight) { record in WeightEditView(record: record) }
         .sheet(item: $report) { file in ShareSheet(url: file.url).presentationDetents([.medium, .large]) }
         .toolbar {
@@ -79,6 +84,44 @@ struct ProgressScreen: View {
                 Button(action: makeReport) { Image(systemName: "square.and.arrow.up") }
                     .accessibilityLabel("Поділитися PDF-звітом")
             }
+        }
+    }
+
+    enum ActivityMetric: String, CaseIterable, Identifiable {
+        case steps = "Кроки"
+        case calories = "Активні ккал"
+        var id: Self { self }
+    }
+
+    @ViewBuilder
+    private var activitySection: some View {
+        let week = health.snapshot.week
+        Section {
+            if week.contains(where: { $0.steps > 0 || $0.activeCalories > 0 }) {
+                Picker("Показник", selection: $activityMetric) {
+                    ForEach(ActivityMetric.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Chart(week) { day in
+                    BarMark(
+                        x: .value("День", day.day, unit: .day),
+                        y: .value(activityMetric.rawValue, activityMetric == .steps ? day.steps : day.activeCalories)
+                    )
+                    .foregroundStyle(activityMetric == .steps ? Ring.stand.color.gradient : Ring.move.color.gradient)
+                }
+                .frame(height: 170)
+                LabeledContent("Середнє за день",
+                               value: activityMetric == .steps
+                                   ? "\(health.snapshot.weekAverageSteps.formatted()) кроків"
+                                   : "\(health.snapshot.weekAverageActiveCalories.formatted()) ккал")
+            } else {
+                Text(health.isLoading ? "Завантажуємо дані з Apple Health…" : "Даних з Apple Health за тиждень ще немає.")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Активність за 7 днів")
+        } footer: {
+            Text("Кроки та активні калорії з Apple Health. Потягніть вниз, щоб оновити.")
         }
     }
 
@@ -119,7 +162,7 @@ struct WeightEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Вага") {
+            Section("Вага") {
                     HStack {
                         TextField("Вага", text: $weightText).keyboardType(.decimalPad)
                         Text("кг").foregroundStyle(.secondary)

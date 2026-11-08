@@ -3,7 +3,8 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(DiaryStore.self) private var diary
     @Binding var selectedTab: AppTab
-    @StateObject private var health = HealthService()
+    @Environment(HealthService.self) private var health
+    @Environment(\.scenePhase) private var scenePhase
     @State private var manualEntry: ManualEntryRequest?
     @State private var showSettings = false
     @State private var showNutritionPlan = false
@@ -21,6 +22,7 @@ struct DashboardView: View {
                 summaryCard(totals)
                 if diary.profile == nil { setupPrompt }
                 quickActions
+                ActivityCard()
                 waterCard
                 meals
                 planLink
@@ -42,7 +44,12 @@ struct DashboardView: View {
                 .accessibilityLabel("Додати страву")
             }
         }
-        .task { await health.requestAndLoad() }
+        .task { await health.refresh() }
+        .refreshable { await health.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            // Pick up steps and workouts recorded while the app was in the background.
+            if phase == .active { Task { await health.refresh() } }
+        }
         .navigationDestination(isPresented: $showNutritionPlan) {
             NutritionPlanView(initialProfile: diary.profileWithLatestWeight)
         }
@@ -81,11 +88,8 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     StatLine(icon: "flag.checkered", tint: .secondary, title: "Ціль", value: Int(goal.rounded()))
                     StatLine(icon: "fork.knife", tint: Theme.accent, title: "Спожито", value: totals.kcal)
-                    StatLine(icon: "flame.fill", tint: .orange, title: "Активність", value: health.activeCalories)
-                    if health.steps > 0 {
-                        Label("\(health.steps) кроків", systemImage: "figure.walk")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    StatLine(icon: "flame.fill", tint: Ring.move.color, title: "Спалено (активність)",
+                             value: Int(health.snapshot.activeCalories.rounded()))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

@@ -33,9 +33,9 @@ class OpenAIProvider:
             timeout=timeout, headers={"Authorization": f"Bearer {api_key}"}
         )
 
-    async def analyze_meal(self, jpeg_base64: str) -> MealAnalysisOutput:
+    async def analyze_meal(self, jpeg_base64: str, hint: str | None = None) -> MealAnalysisOutput:
         content = [
-            {"type": "input_text", "text": prompts.MEAL_INSTRUCTIONS},
+            {"type": "input_text", "text": prompts.meal_instructions(hint)},
             {"type": "input_image", "image_url": f"data:image/jpeg;base64,{jpeg_base64}", "detail": "high"},
         ]
         return await self._structured(prompts.MEAL_SYSTEM, content, "meal_analysis", MEAL_ANALYSIS_SCHEMA, MealAnalysisOutput)

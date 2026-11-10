@@ -166,7 +166,7 @@ def create_app(
         limit(f"analyze:h:{device}", settings.analyze_per_hour, HOUR, message)
         limit(f"analyze:d:{device}", settings.analyze_per_day, DAY, message)
 
-        output = await run_provider(request.app.state.provider.analyze_meal(body.image_base64))
+        output = await run_provider(request.app.state.provider.analyze_meal(body.image_base64, body.hint))
         return MealAnalysisResponse.from_output(output)
 
     @app.post("/v1/recipes", response_model=RecipeSuggestions)

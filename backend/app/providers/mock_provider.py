@@ -15,9 +15,9 @@ from ..schemas import (
 class MockProvider:
     name = "mock"
 
-    async def analyze_meal(self, jpeg_base64: str) -> MealAnalysisOutput:
+    async def analyze_meal(self, jpeg_base64: str, hint: str | None = None) -> MealAnalysisOutput:
         return MealAnalysisOutput(
-            dish="Гречка з куркою",
+            dish=hint.split(".")[0] if hint else "Гречка з куркою",
             estimatedGrams=350,
             caloriesPer100g=143,
             protein=38,

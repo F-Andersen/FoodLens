@@ -130,6 +130,7 @@ struct EditMealEntryView: View {
             }
         }
         .navigationTitle("Редагування")
+        .keyboardDismissal()
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: grams) { _, newValue in
             guard let factor = portion.factor(for: newValue), scaleWithWeight else { return }
@@ -235,6 +236,7 @@ struct ManualEntryView: View {
             }
         }
         .navigationTitle("Додати страву")
+        .keyboardDismissal()
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: voice.transcript) { _, value in if !value.isEmpty { name = value } }
         .onDisappear { voice.stop() }

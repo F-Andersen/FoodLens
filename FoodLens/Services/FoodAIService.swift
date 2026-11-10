@@ -177,14 +177,19 @@ actor FoodLensAPI {
         return url
     }
 
-    func analyze(_ image: UIImage, baseURL: String) async throws -> FoodAnalysis {
+    /// - Parameter hint: the user's correction of what the meal is; the server then trusts it and uses the photo for portions.
+    func analyze(_ image: UIImage, baseURL: String, hint: String? = nil) async throws -> FoodAnalysis {
         let jpeg = try await Task.detached(priority: .userInitiated) { () throws -> Data in
             guard let data = image.downscaled(maxDimension: FoodLensAPI.maxImageDimension).jpegData(compressionQuality: 0.7) else {
                 throw FoodAIError.imageEncodingFailed
             }
             return data
         }.value
-        let body = try JSONEncoder().encode(["image_base64": jpeg.base64EncodedString()])
+        var fields = ["image_base64": jpeg.base64EncodedString()]
+        if let hint = hint?.trimmingCharacters(in: .whitespacesAndNewlines), !hint.isEmpty {
+            fields["hint"] = String(hint.prefix(300))
+        }
+        let body = try JSONEncoder().encode(fields)
         return try await send(path: "v1/analyze", body: body, baseURL: baseURL, timeout: 90)
     }
 

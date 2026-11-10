@@ -79,6 +79,7 @@ struct NutritionPlanView: View {
             }
         }
         .navigationTitle("Норма та меню")
+        .keyboardDismissal()
         .onChange(of: profile) { _, newValue in
             diary.profile = newValue
             goalsApplied = false

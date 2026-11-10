@@ -40,9 +40,9 @@ class GeminiProvider:
             timeout=timeout, headers={"x-goog-api-key": api_key, "Api-Revision": API_REVISION}
         )
 
-    async def analyze_meal(self, jpeg_base64: str) -> MealAnalysisOutput:
+    async def analyze_meal(self, jpeg_base64: str, hint: str | None = None) -> MealAnalysisOutput:
         content = [
-            {"type": "text", "text": prompts.MEAL_INSTRUCTIONS},
+            {"type": "text", "text": prompts.meal_instructions(hint)},
             {"type": "image", "data": jpeg_base64, "mime_type": "image/jpeg"},
         ]
         return await self._structured(prompts.MEAL_SYSTEM, content, MEAL_ANALYSIS_SCHEMA, MealAnalysisOutput)

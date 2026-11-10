@@ -75,6 +75,7 @@ struct ProgressScreen: View {
             }
         }
         .navigationTitle("Мій прогрес")
+        .keyboardDismissal()
         .task { if health.lastUpdated == nil { await health.refresh() } }
         .refreshable { await health.refresh() }
         .sheet(item: $editingWeight) { record in WeightEditView(record: record) }
@@ -170,6 +171,7 @@ struct WeightEditView: View {
                 }
             }
             .navigationTitle("Змінити запис")
+            .keyboardDismissal()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Скасувати") { dismiss() } }

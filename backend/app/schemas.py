@@ -87,6 +87,14 @@ class MealAnalysisResponse(MealAnalysisOutput):
 class AnalyzeRequest(BaseModel):
     # Base64 of a JPEG without a data: prefix. The exact byte limit is checked after decoding.
     image_base64: str = Field(min_length=16, max_length=6_000_000)
+    # The user's correction of what the meal is, e.g. "Вівсянка з горіхами. Склад: вівсянка, горіхи".
+    hint: str | None = Field(default=None, max_length=300)
+
+    @field_validator("hint")
+    @classmethod
+    def _clean_hint(cls, value: str | None) -> str | None:
+        value = (value or "").strip()
+        return value or None
 
 
 # ---------- Recipes ----------

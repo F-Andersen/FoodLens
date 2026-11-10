@@ -6,7 +6,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-PROVIDERS = ("anthropic", "openai", "mock")
+PROVIDERS = ("anthropic", "openai", "gemini", "mock")
 
 
 class ConfigError(RuntimeError):
@@ -20,6 +20,8 @@ class Settings:
     anthropic_model: str = "claude-opus-5-5"
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.8-flash"
     ai_timeout_seconds: float = 90.0
 
     # Device tokens are HMAC-signed with this secret (at least 32 characters).
@@ -66,6 +68,8 @@ class Settings:
             anthropic_model=get("ANTHROPIC_MODEL", defaults.anthropic_model) or defaults.anthropic_model,
             openai_api_key=get("OPENAI_API_KEY"),
             openai_model=get("OPENAI_MODEL", defaults.openai_model) or defaults.openai_model,
+            gemini_api_key=get("GEMINI_API_KEY"),
+            gemini_model=get("GEMINI_MODEL", defaults.gemini_model) or defaults.gemini_model,
             ai_timeout_seconds=get_float("AI_TIMEOUT_SECONDS", defaults.ai_timeout_seconds),
             auth_secret=get("AUTH_SECRET", "") or "",
             token_ttl_days=get_int("TOKEN_TTL_DAYS", defaults.token_ttl_days),
@@ -86,6 +90,8 @@ class Settings:
             raise ConfigError("ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic")
         if self.ai_provider == "openai" and not self.openai_api_key:
             raise ConfigError("OPENAI_API_KEY is required when AI_PROVIDER=openai")
+        if self.ai_provider == "gemini" and not self.gemini_api_key:
+            raise ConfigError("GEMINI_API_KEY is required when AI_PROVIDER=gemini")
         if len(self.auth_secret) < 32:
             raise ConfigError("AUTH_SECRET must be at least 32 characters (try: openssl rand -hex 32)")
         for name in ("token_ttl_days", "max_image_bytes", "analyze_per_hour", "analyze_per_day",

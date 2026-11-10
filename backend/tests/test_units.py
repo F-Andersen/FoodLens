@@ -43,6 +43,13 @@ def test_settings_reject_invalid_env(env):
         Settings.from_env(env)
 
 
+def test_gemini_provider_requires_its_key():
+    with pytest.raises(ConfigError):
+        Settings.from_env({"AI_PROVIDER": "gemini", "AUTH_SECRET": SECRET})
+    settings = Settings.from_env({"AI_PROVIDER": "gemini", "GEMINI_API_KEY": "k", "AUTH_SECRET": SECRET})
+    assert settings.gemini_model == "gemini-3.8-flash"
+
+
 def test_openai_provider_needs_only_openai_key():
     env = {"AI_PROVIDER": "OpenAI", "OPENAI_API_KEY": "k", "AUTH_SECRET": SECRET}
     assert Settings.from_env(env).ai_provider == "openai"

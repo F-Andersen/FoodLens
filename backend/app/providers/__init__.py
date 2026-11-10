@@ -19,6 +19,10 @@ def make_provider(settings: Settings) -> AIProvider:
         from .openai_provider import OpenAIProvider
 
         return OpenAIProvider(settings.openai_api_key or "", settings.openai_model, settings.ai_timeout_seconds)
+    if settings.ai_provider == "gemini":
+        from .gemini_provider import GeminiProvider
+
+        return GeminiProvider(settings.gemini_api_key or "", settings.gemini_model, settings.ai_timeout_seconds)
     from .mock_provider import MockProvider
 
     return MockProvider()

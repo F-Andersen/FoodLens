@@ -126,6 +126,23 @@ docker run --rm -p 8000:8000 -e AI_PROVIDER=mock -e AUTH_SECRET=$(openssl rand -
 
 Щоб змінити провайдера, змініть `AI_PROVIDER` у `.env` і виконайте `docker compose up -d`.
 
+### Сервер, де вже працює nginx
+
+Якщо порти 80 і 443 уже зайняті nginx з іншими сайтами, Caddy не потрібен. API запускається лише на `127.0.0.1`, а nginx роздає його за окремою адресою.
+
+1. Скопіюйте код у `/opt/foodlens` і створіть `.env` (без `DOMAIN`).
+2. Запустіть контейнер:
+   ```bash
+   sudo docker compose -f docker-compose.nginx.yml -p foodlens up -d --build
+   ```
+3. Отримайте сертифікат і встановіть сайт за шаблоном [deploy/nginx-foodlens.conf](deploy/nginx-foodlens.conf). Наявні сайти при цьому не змінюються:
+   ```bash
+   sudo certbot certonly --nginx -d <host> --cert-name foodlens
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+Без власного домену підійде адреса виду `foodlens.<IP>.sslip.io`, наприклад `foodlens.130.61.111.249.sslip.io`: вона вказує на IP сервера, і Let's Encrypt видає для неї звичайний сертифікат.
+
 Після розгортання вкажіть адресу сервера в `AppConfig.defaultAPIBaseURL` у застосунку. Тоді користувачам не доведеться нічого налаштовувати.
 
 ## Моделі

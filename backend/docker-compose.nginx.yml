@@ -1,0 +1,19 @@
+# For a server that already runs nginx (or another reverse proxy) on ports 80/443.
+# The API listens only on 127.0.0.1; nginx terminates HTTPS and proxies to it.
+#   docker compose -f docker-compose.nginx.yml up -d --build
+# Example nginx site: deploy/nginx-foodlens.conf
+services:
+  api:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${FOODLENS_PORT:-18090}:8000"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }

@@ -37,10 +37,10 @@ class AnthropicProvider:
         self._model = model
         self._client = client or anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=2)
 
-    async def analyze_meal(self, jpeg_base64: str) -> MealAnalysisOutput:
+    async def analyze_meal(self, jpeg_base64: str, hint: str | None = None) -> MealAnalysisOutput:
         content = [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": jpeg_base64}},
-            {"type": "text", "text": prompts.MEAL_INSTRUCTIONS},
+            {"type": "text", "text": prompts.meal_instructions(hint)},
         ]
         return await self._structured(
             system=prompts.MEAL_SYSTEM, content=content, schema=MEAL_ANALYSIS_SCHEMA, model_type=MealAnalysisOutput

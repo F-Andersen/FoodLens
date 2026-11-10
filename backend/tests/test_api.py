@@ -107,6 +107,20 @@ def test_analyze_returns_ingredients_with_ids(client):
     assert len(ids) == 2 and len(set(ids)) == 2
 
 
+def test_analyze_passes_user_correction_to_provider(client):
+    token = register(client)
+    body = {"image_base64": JPEG, "hint": "  Вівсянка з горіхами. Склад: вівсянка, горіхи  "}
+    response = client.post("/v1/analyze", json=body, headers=auth(token))
+    assert response.status_code == 200
+    assert response.json()["dish"] == "Вівсянка з горіхами"
+
+
+def test_analyze_rejects_overlong_hint(client):
+    token = register(client)
+    response = client.post("/v1/analyze", json={"image_base64": JPEG, "hint": "x" * 301}, headers=auth(token))
+    assert response.status_code == 400
+
+
 def test_analyze_rejects_invalid_base64(client):
     token = register(client)
     response = client.post("/v1/analyze", json={"image_base64": "!!!not base64!!!"}, headers=auth(token))
@@ -191,7 +205,7 @@ class FailingProvider(MockProvider):
     def __init__(self, error: Exception) -> None:
         self.error = error
 
-    async def analyze_meal(self, jpeg_base64):
+    async def analyze_meal(self, jpeg_base64, hint=None):
         raise self.error
 
     async def suggest_recipes(self, request):

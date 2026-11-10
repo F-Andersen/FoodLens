@@ -99,6 +99,19 @@ struct APIClientTests {
         #expect(jpeg.starts(with: [0xFF, 0xD8, 0xFF]))
     }
 
+    @Test func sendsUserCorrectionAsHint() async throws {
+        StubURLProtocol.handler = { _ in (200, analysisJSON) }
+        let api = FoodLensAPI(session: StubURLProtocol.session(), credentials: MemoryCredentials(token: "t"))
+
+        _ = try await api.analyze(smallImage(), baseURL: "https://api.test", hint: "  Страва: вівсянка з горіхами.  ")
+        _ = try await api.analyze(smallImage(), baseURL: "https://api.test", hint: "   ")
+
+        let first = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[0].httpBody!) as? [String: String]
+        let second = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].httpBody!) as? [String: String]
+        #expect(first?["hint"] == "Страва: вівсянка з горіхами.")
+        #expect(second?["hint"] == nil)
+    }
+
     @Test func reRegistersOnceWhenTokenIsRejected() async throws {
         StubURLProtocol.handler = { request in
             switch (request.url!.path, request.value(forHTTPHeaderField: "Authorization")) {

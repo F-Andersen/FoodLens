@@ -284,3 +284,16 @@ def test_gemini_does_not_retry_client_errors():
     with pytest.raises(ProviderError):
         run(gemini_provider(handler).analyze_meal("QUJD"))
     assert len(calls) == 1
+
+
+def test_user_correction_is_added_to_prompt_for_every_provider():
+    from app.providers import prompts
+
+    assert prompts.meal_instructions(None) == prompts.MEAL_INSTRUCTIONS
+    corrected = prompts.meal_instructions("Вівсянка з горіхами")
+    assert corrected.startswith(prompts.MEAL_INSTRUCTIONS)
+    assert "<user_correction>\nВівсянка з горіхами\n</user_correction>" in corrected
+
+    provider, messages = anthropic_provider(text_response(MEAL_JSON), model="claude-haiku-5-5")
+    run(provider.analyze_meal("QUJD", hint="Вівсянка з горіхами"))
+    assert "Вівсянка з горіхами" in messages.calls[0]["messages"][0]["content"][1]["text"]

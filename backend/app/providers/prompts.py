@@ -27,6 +27,20 @@ Ukrainian foods that are easy to misread in a photo:
 - Шкварки and засмажка: browned pork pieces and fried onion served on top of potato, вареники or каша. Count the fat they were fried in.
 - Also common: борщ, зелений борщ, вареники, деруни, голубці, котлети, гречка, сирники, оселедець, бутерброди на житньому хлібі."""
 
+def meal_instructions(hint: str | None = None) -> str:
+    """The analysis task, plus the user's correction when they have said what the meal really is."""
+    if not hint:
+        return MEAL_INSTRUCTIONS
+    return MEAL_INSTRUCTIONS + f"""
+
+The user has corrected what this meal is. Treat their description as correct for the dish and its components,
+even if it differs from what the photo suggests, and use the photo only to estimate portion sizes.
+Use the user's dish name if they gave one.
+<user_correction>
+{hint}
+</user_correction>"""
+
+
 RECIPES_SYSTEM = (
     "You are a practical home-cooking assistant for FoodLens, a Ukrainian nutrition app. "
     "You suggest simple, realistic recipes that a person can cook today with what they already have. "

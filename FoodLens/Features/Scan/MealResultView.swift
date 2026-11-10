@@ -23,9 +23,21 @@ struct MealResultView: View {
     @State private var analysisSource = ""
     @State private var confidence = 0.0
     @State private var saved = false
+    @State private var analyzedName = ""
+    @State private var analyzedDetails = ""
+    @State private var recalculating = false
     @State private var showSavedAlert = false
 
     private var calories: Double { grams * caloriesPer100g / 100 }
+
+    private var serverURL: String? { AppConfig.apiBaseURL(override: backendURL) }
+
+    /// The user changed the dish name or composition, so the numbers no longer match what they describe.
+    private var correctionPending: Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedName.isEmpty && (trimmedName != analyzedName || trimmedDetails != analyzedDetails)
+    }
 
     var body: some View {
         Form {
@@ -45,6 +57,18 @@ struct MealResultView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Уточніть склад").font(.caption).foregroundStyle(.secondary)
                         TextField("Наприклад: рис, курка, овочі, кукурудза", text: $details, axis: .vertical).lineLimit(2...4)
+                    }
+                    if correctionPending && serverURL != nil && !saved {
+                        Button {
+                            Task { await recalculate() }
+                        } label: {
+                            HStack(spacing: Spacing.s) {
+                                if recalculating { ProgressView() } else { Image(systemName: "arrow.triangle.2.circlepath") }
+                                Text(recalculating ? "Перераховуємо…" : "Перерахувати калорії за новою назвою")
+                            }
+                            .font(.subheadline.weight(.semibold))
+                        }
+                        .disabled(recalculating)
                     }
                     Picker("Прийом їжі", selection: $mealType) { ForEach(MealEntry.MealType.allCases) { Text($0.title).tag($0) } }
                     NumberFieldRow(title: "Точна вага", value: $grams, unit: "г")
@@ -72,6 +96,7 @@ struct MealResultView: View {
             }
         }
         .task { await analyzePhoto() }
+        .keyboardDismissal()
         .onChange(of: grams) { _, newValue in
             // Keep macros consistent with the portion size.
             guard let factor = portion.factor(for: newValue) else { return }
@@ -112,6 +137,27 @@ struct MealResultView: View {
         }
     }
 
+    /// Re-runs the analysis with the user's description, keeping the name they typed.
+    private func recalculate() async {
+        guard let serverURL else { return }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        recalculating = true
+        defer { recalculating = false }
+        let userName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        var hint = "Страва: \(userName)."
+        if !userDetails.isEmpty { hint += " Склад: \(userDetails)." }
+        do {
+            let result = try await FoodLensAPI.shared.analyze(image, baseURL: serverURL, hint: hint)
+            apply(result, source: "AI-сервер, уточнено")
+            name = userName
+            analyzedName = userName
+            analysisError = nil
+        } catch {
+            analysisError = "Не вдалося перерахувати: \(error.localizedDescription)"
+        }
+    }
+
     private func apply(_ result: FoodAnalysis, source: String) {
         // Resetting the tracker first makes the grams change below a no-op for scaling.
         portion.reset(to: result.estimatedGrams)
@@ -124,5 +170,7 @@ struct MealResultView: View {
         grams = result.estimatedGrams
         confidence = result.confidence
         analysisSource = source
+        analyzedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        analyzedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

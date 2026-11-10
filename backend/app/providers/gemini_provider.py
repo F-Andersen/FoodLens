@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -23,13 +24,18 @@ logger = logging.getLogger("foodlens.gemini")
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 API_REVISION = "2026-05-20"
+# Gemini often answers 503 "high demand" for a few seconds; pauses before each retry.
+RETRY_DELAYS = (1.0, 3.0)
+RETRYABLE_STATUSES = (500, 502, 503, 504)
 
 
 class GeminiProvider:
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str, timeout: float, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, api_key: str, model: str, timeout: float, client: httpx.AsyncClient | None = None,
+                 retry_delays: tuple[float, ...] = RETRY_DELAYS) -> None:
         self._model = model
+        self._retry_delays = retry_delays
         self._client = client or httpx.AsyncClient(
             timeout=timeout, headers={"x-goog-api-key": api_key, "Api-Revision": API_REVISION}
         )
@@ -59,6 +65,12 @@ class GeminiProvider:
         }
         try:
             response = await self._client.post(INTERACTIONS_URL, json=payload)
+            for delay in self._retry_delays:
+                if response.status_code not in RETRYABLE_STATUSES:
+                    break
+                logger.info("Gemini status %s, retrying in %ss", response.status_code, delay)
+                await asyncio.sleep(delay)
+                response = await self._client.post(INTERACTIONS_URL, json=payload)
         except httpx.TransportError as exc:  # timeouts and connection errors
             logger.warning("Gemini unreachable: %s", type(exc).__name__)
             raise ProviderUnavailable("connection") from exc

@@ -9,6 +9,7 @@ from app.schemas import (
     MEAL_ANALYSIS_SCHEMA,
     RECIPE_SUGGESTIONS_SCHEMA,
     MealAnalysisOutput,
+    MealAnalysisResponse,
     Recipe,
     RecipeRequest,
     RecipeSuggestions,
@@ -119,6 +120,25 @@ def _assert_strict(schema):
 @pytest.mark.parametrize("schema", [MEAL_ANALYSIS_SCHEMA, RECIPE_SUGGESTIONS_SCHEMA])
 def test_schemas_are_strict(schema):
     _assert_strict(schema)
+
+
+def _analysis(**overrides):
+    item = {"name": "a", "grams": 200, "calories": 300, "protein": 10, "carbs": 20, "fat": 15, "fiber": 2}
+    data = {"dish": "x", "estimatedGrams": 999, "caloriesPer100g": 999, "protein": 1, "carbs": 1, "fat": 1, "fiber": 1,
+            "confidence": 0.5, "ingredients": [item, {**item, "grams": 100, "calories": 100}]}
+    return MealAnalysisOutput.model_validate({**data, **overrides})
+
+
+def test_totals_are_derived_from_ingredients():
+    response = MealAnalysisResponse.from_output(_analysis())
+    assert response.estimatedGrams == 300
+    assert response.caloriesPer100g == pytest.approx(133.3)
+    assert (response.protein, response.carbs, response.fat, response.fiber) == (20, 40, 30, 4)
+
+
+def test_totals_stay_when_there_are_no_ingredients():
+    response = MealAnalysisResponse.from_output(_analysis(ingredients=[], estimatedGrams=0, caloriesPer100g=0))
+    assert response.estimatedGrams == 0 and response.protein == 1
 
 
 def test_recipe_request_cleans_lists():

@@ -5,7 +5,7 @@ import UIKit
 enum AppConfig {
     /// Production API, e.g. "https://api.foodlens.example". Set after deploying `backend/`.
     /// While empty, the app analyses photos on the device unless a custom address is set in Settings.
-    static let defaultAPIBaseURL = ""
+    static let defaultAPIBaseURL = "https://foodlens.130.61.111.249.sslip.io"
 
     /// The custom address from Settings if set, otherwise the built-in one; nil when neither exists.
     static func apiBaseURL(override: String) -> String? {

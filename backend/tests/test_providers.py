@@ -173,7 +173,7 @@ def test_openai_timeout_is_unavailable():
 
 def gemini_provider(handler):
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers={"Api-Revision": API_REVISION})
-    return GeminiProvider("key", "gemini-3.8-flash", 30, client=client)
+    return GeminiProvider("key", "gemini-3.8-flash", 30, client=client, retry_delays=(0, 0))
 
 
 def gemini_output(payload):
@@ -245,3 +245,33 @@ def test_gemini_timeout_is_unavailable():
 
     with pytest.raises(ProviderUnavailable):
         run(gemini_provider(handler).analyze_meal("QUJD"))
+
+
+def test_gemini_retries_temporary_errors():
+    responses = [httpx.Response(503, json={}), httpx.Response(503, json={}), httpx.Response(200, json=gemini_output(MEAL_JSON))]
+    assert run(gemini_provider(lambda r: responses.pop(0)).analyze_meal("QUJD")).dish == "Борщ"
+    assert responses == []
+
+
+def test_gemini_gives_up_after_retries():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(503, json={})
+
+    with pytest.raises(ProviderUnavailable):
+        run(gemini_provider(handler).analyze_meal("QUJD"))
+    assert len(calls) == 3
+
+
+def test_gemini_does_not_retry_client_errors():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(400, json={})
+
+    with pytest.raises(ProviderError):
+        run(gemini_provider(handler).analyze_meal("QUJD"))
+    assert len(calls) == 1

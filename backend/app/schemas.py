@@ -71,7 +71,16 @@ class MealAnalysisResponse(MealAnalysisOutput):
     @classmethod
     def from_output(cls, output: MealAnalysisOutput) -> "MealAnalysisResponse":
         data = output.model_dump()
-        data["ingredients"] = [{**item, "id": str(uuid.uuid4())} for item in data["ingredients"]]
+        items = data["ingredients"]
+        grams = sum(item["grams"] for item in items)
+        if grams > 0:
+            # Models often return totals that disagree with their own ingredients, and the app
+            # stores the totals, so they are always derived from the ingredient list.
+            data["estimatedGrams"] = round(grams, 1)
+            data["caloriesPer100g"] = round(sum(item["calories"] for item in items) / grams * 100, 1)
+            for field in ("protein", "carbs", "fat", "fiber"):
+                data[field] = round(sum(item[field] for item in items), 1)
+        data["ingredients"] = [{**item, "id": str(uuid.uuid4())} for item in items]
         return cls.model_validate(data)
 
 

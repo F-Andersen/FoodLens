@@ -1,6 +1,6 @@
 # FoodLens API
 
-Сервер для iOS-застосунку FoodLens. Він аналізує фото страв і підбирає рецепти через AI. Провайдер обирається змінною `AI_PROVIDER`: `anthropic` (Claude, за замовчуванням), `openai` або `mock` (для розробки, без мережевих запитів).
+Сервер для iOS-застосунку FoodLens. Він аналізує фото страв і підбирає рецепти через AI. Провайдер обирається змінною `AI_PROVIDER`: `anthropic` (Claude, за замовчуванням), `openai`, `gemini` або `mock` (для розробки, без мережевих запитів).
 
 API-ключі зберігаються лише на сервері. Застосунок отримує анонімний токен пристрою, а квоти діють окремо для кожного встановлення.
 
@@ -14,7 +14,7 @@ backend/
 │   ├── auth.py              # HMAC-токени пристроїв
 │   ├── ratelimit.py         # Ліміти запитів (у пам'яті)
 │   ├── schemas.py           # Pydantic-моделі та JSON Schema для AI
-│   └── providers/           # anthropic, openai, mock + спільні промпти
+│   └── providers/           # anthropic, openai, gemini, mock + спільні промпти
 ├── tests/                   # pytest
 ├── Dockerfile
 ├── docker-compose.yml       # API + Caddy (HTTPS)
@@ -109,7 +109,7 @@ docker run --rm -p 8000:8000 -e AI_PROVIDER=mock -e AUTH_SECRET=$(openssl rand -
    - `DOMAIN`;
    - `AUTH_SECRET` (згенеруйте командою `openssl rand -hex 32`);
    - `AI_PROVIDER`;
-   - `ANTHROPIC_API_KEY` або `OPENAI_API_KEY`.
+   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` або `GEMINI_API_KEY`.
 4. **Запуск.** Caddy сам отримає сертифікат Let's Encrypt:
    ```bash
    docker compose up -d --build
@@ -132,5 +132,6 @@ docker run --rm -p 8000:8000 -e AI_PROVIDER=mock -e AUTH_SECRET=$(openssl rand -
 
 - **Anthropic.** За замовчуванням `claude-opus-5-5` із `effort: medium` і відповіддю за JSON Schema. Увімкнено серверний fallback (`fallbacks: "default"`): якщо модель відмовляє через спрацювання фільтрів безпеки, API сам повторює запит на рекомендованій моделі. Модель можна змінити через `ANTHROPIC_MODEL`.
 - **OpenAI.** Responses API зі строгою JSON Schema. Модель задається через `OPENAI_MODEL`.
+- **Gemini.** Interactions API з JSON Schema та `store: false`. Модель задається через `GEMINI_MODEL`, за замовчуванням `gemini-3.8-flash`. Ключ створюється в Google AI Studio. На безкоштовному рівні Google може використовувати запити для покращення своїх продуктів, а ліміти невеликі, тому для реальних користувачів потрібен платний ключ.
 
 Відповідь моделі завжди перевіряється Pydantic: від'ємні значення обнуляються, `confidence` обмежується діапазоном 0–1.

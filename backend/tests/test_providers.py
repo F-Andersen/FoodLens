@@ -10,6 +10,7 @@ import pytest
 
 from app.providers import ProviderBadOutput, ProviderError, ProviderRefused, ProviderUnavailable
 from app.providers.anthropic_provider import FALLBACK_BETA, AnthropicProvider
+from app.providers.gemini_provider import API_REVISION, GeminiProvider
 from app.providers.openai_provider import OpenAIProvider
 from app.schemas import RecipeRequest
 
@@ -166,3 +167,81 @@ def test_openai_timeout_is_unavailable():
 
     with pytest.raises(ProviderUnavailable):
         run(openai_provider(handler).analyze_meal("QUJD"))
+
+
+# ---------- Gemini ----------
+
+def gemini_provider(handler):
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers={"Api-Revision": API_REVISION})
+    return GeminiProvider("key", "gemini-3.8-flash", 30, client=client)
+
+
+def gemini_output(payload):
+    return {
+        "status": "completed",
+        "steps": [
+            {"type": "thought", "content": [{"type": "text", "text": "thinking"}]},
+            {"type": "model_output", "content": [{"type": "text", "text": json.dumps(payload)}]},
+        ],
+    }
+
+
+def test_gemini_analyze_sends_image_schema_and_no_storage():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["revision"] = request.headers["Api-Revision"]
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=gemini_output(MEAL_JSON))
+
+    result = run(gemini_provider(handler).analyze_meal("QUJD"))
+    body = seen["body"]
+    assert seen["url"].endswith("/v1beta/interactions") and seen["revision"] == API_REVISION
+    assert body["model"] == "gemini-3.8-flash" and body["store"] is False
+    assert body["response_format"]["mime_type"] == "application/json"
+    assert body["response_format"]["schema"]["required"][0] == "dish"
+    assert body["input"][1] == {"type": "image", "data": "QUJD", "mime_type": "image/jpeg"}
+    assert "Ukrainian" in body["system_instruction"]
+    assert result.dish == "Борщ" and result.confidence == 1.0
+
+
+def test_gemini_recipes_parse():
+    provider = gemini_provider(lambda r: httpx.Response(200, json=gemini_output(RECIPES_JSON)))
+    result = run(provider.suggest_recipes(RecipeRequest(pantry=["яйця"], caloriesLeft=500, proteinLeft=40)))
+    assert result.recipes[0].title == "Омлет"
+
+
+def test_gemini_joins_text_parts():
+    text = json.dumps(MEAL_JSON)
+    body = {"status": "completed", "steps": [{"type": "model_output", "content": [
+        {"type": "text", "text": text[:20]}, {"type": "text", "text": text[20:]}]}]}
+    assert run(gemini_provider(lambda r: httpx.Response(200, json=body)).analyze_meal("QUJD")).dish == "Борщ"
+
+
+@pytest.mark.parametrize("body,expected", [
+    ({"status": "failed", "errors": [{"code": "safety_blocked", "message": "x"}]}, ProviderRefused),
+    ({"status": "failed", "errors": [{"code": "internal", "message": "x"}]}, ProviderError),
+    ({"status": "incomplete", "steps": []}, ProviderBadOutput),
+    ({"status": "completed", "steps": []}, ProviderBadOutput),
+    ({"status": "completed", "steps": [{"type": "model_output", "content": [{"type": "text", "text": "{oops"}]}]},
+     ProviderBadOutput),
+])
+def test_gemini_bad_results(body, expected):
+    with pytest.raises(expected):
+        run(gemini_provider(lambda r: httpx.Response(200, json=body)).analyze_meal("QUJD"))
+
+
+@pytest.mark.parametrize("status,expected", [(429, ProviderUnavailable), (503, ProviderUnavailable),
+                                             (400, ProviderError), (403, ProviderError)])
+def test_gemini_status_errors(status, expected):
+    with pytest.raises(expected):
+        run(gemini_provider(lambda r: httpx.Response(status, json={})).analyze_meal("QUJD"))
+
+
+def test_gemini_timeout_is_unavailable():
+    def handler(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    with pytest.raises(ProviderUnavailable):
+        run(gemini_provider(handler).analyze_meal("QUJD"))

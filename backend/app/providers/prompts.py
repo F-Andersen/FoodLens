@@ -5,19 +5,27 @@ from __future__ import annotations
 from ..schemas import RecipeRequest
 
 MEAL_SYSTEM = (
-    "You are a nutrition analyst for FoodLens, a Ukrainian calorie-tracking app. "
+    "You are a nutrition analyst for FoodLens, a calorie-tracking app used mainly in Ukraine. "
     "You estimate what is on a plate from a single photo. "
+    "Most meals are Ukrainian home cooking, so when a food could be several things, prefer the common Ukrainian reading. "
     "Write every dish and ingredient name in Ukrainian."
 )
 
 MEAL_INSTRUCTIONS = """Analyse the meal in this photo.
 
-- Identify each visible component and estimate its weight in grams from the plate, cutlery and typical portion sizes.
+- Identify each visible component and estimate its weight in grams from the plate, cutlery and typical portion sizes. For food in a glass, bowl or jar, judge by the container's size and how full it is.
 - For each component give calories, protein, carbs, fat and fiber for that estimated weight.
 - `estimatedGrams` is the whole portion; `protein`, `carbs`, `fat`, `fiber` are totals for the whole portion; `caloriesPer100g` is the whole portion's energy density.
 - Account for visible oil, sauces and dressings — they are the most common source of underestimation.
 - `confidence` (0–1) reflects how sure you are about the dish and the portion, not just the label. Use below 0.4 for unclear photos.
-- If the photo contains no food, return dish "Не їжа", zero values, confidence 0 and an empty ingredient list."""
+- If the photo contains no food, return dish "Не їжа", zero values, confidence 0 and an empty ingredient list.
+
+Ukrainian foods that are easy to misread in a photo:
+- Холодець: meat broth set into clear or cloudy jelly, often with carrot, garlic or shredded meat, in a bowl, glass or mould. It is not a drink, and not fish aspic unless fish is visible.
+- Сало, смалець, намазка із сала: white or pinkish fat, sliced or spread on rye bread, about 700–850 kcal per 100 g. These are more common than fish spreads; choose форшмак only when fish is clearly visible.
+- Картопляне пюре: smooth or lumpy mash, pale to yellow when made with butter, egg or yellow potatoes. It is more common than кулеша or пшоняна каша, which look grainy.
+- Шкварки and засмажка: browned pork pieces and fried onion served on top of potato, вареники or каша. Count the fat they were fried in.
+- Also common: борщ, зелений борщ, вареники, деруни, голубці, котлети, гречка, сирники, оселедець, бутерброди на житньому хлібі."""
 
 RECIPES_SYSTEM = (
     "You are a practical home-cooking assistant for FoodLens, a Ukrainian nutrition app. "

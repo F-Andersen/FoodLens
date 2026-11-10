@@ -143,6 +143,23 @@ extension View {
     }
 }
 
+extension View {
+    /// Number pads have no return key, so every screen with input gets a «Готово» button above the
+    /// keyboard, and scrolling the form also hides it.
+    func keyboardDismissal() -> some View {
+        scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Готово") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+    }
+}
+
 extension Text {
     /// Text-returning variant of `numberFont`, for use inside interpolated `Text`.
     func number(_ style: Font.TextStyle, weight: Font.Weight = .semibold) -> Text {

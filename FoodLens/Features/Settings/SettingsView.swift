@@ -92,6 +92,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Налаштування")
+        .keyboardDismissal()
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
     }
 }

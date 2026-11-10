@@ -81,6 +81,7 @@ struct OnboardingView: View {
             ProfileFormSection(profile: $profile)
         }
         .navigationTitle("Про вас")
+        .keyboardDismissal()
         .safeAreaInset(edge: .bottom) {
             Button { go(to: .result) } label: {
                 Text("Розрахувати").font(.headline).frame(maxWidth: .infinity).padding(.vertical, Spacing.s)

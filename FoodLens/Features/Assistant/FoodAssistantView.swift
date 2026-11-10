@@ -104,6 +104,7 @@ struct FoodAssistantView: View {
         }
         .background(Theme.background)
         .navigationTitle("Асистент")
+        .keyboardDismissal()
         .sheet(item: $selectedRecipe) { recipe in
             NavigationStack { AssistantRecipeDetailView(recipe: recipe) }
         }

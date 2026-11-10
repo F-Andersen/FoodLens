@@ -47,10 +47,19 @@ class FakeAnthropicMessages:
         return self.response
 
 
-def anthropic_provider(response=None, error=None):
+def anthropic_provider(response=None, error=None, model="claude-opus-5-5"):
     messages = FakeAnthropicMessages(response, error)
     client = SimpleNamespace(beta=SimpleNamespace(messages=messages))
-    return AnthropicProvider("key", "claude-opus-5-5", 30, client=client), messages
+    return AnthropicProvider("key", model, 30, client=client), messages
+
+
+def test_haiku_requests_have_no_fallback():
+    provider, messages = anthropic_provider(text_response(MEAL_JSON), model="claude-haiku-5-5")
+    run(provider.analyze_meal("QUJD"))
+    call = messages.calls[0]
+    assert call["model"] == "claude-haiku-5-5"
+    assert "fallbacks" not in call and "betas" not in call
+    assert call["output_config"]["format"]["type"] == "json_schema"
 
 
 def text_response(payload, stop_reason="end_turn"):

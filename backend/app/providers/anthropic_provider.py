@@ -25,6 +25,11 @@ logger = logging.getLogger("foodlens.anthropic")
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+def supports_server_fallback(model: str) -> bool:
+    """Haiku models have no server-side fallback, so the parameter would do nothing for them."""
+    return not model.startswith("claude-haiku")
+
+
 class AnthropicProvider:
     name = "anthropic"
 
@@ -54,14 +59,14 @@ class AnthropicProvider:
 
     async def _structured(self, *, system: str, content: list[dict], schema: dict, model_type: type[BaseModel]) -> Any:
         try:
+            fallback = {"betas": [FALLBACK_BETA], "fallbacks": "default"} if supports_server_fallback(self._model) else {}
             response = await self._client.beta.messages.create(
                 model=self._model,
                 max_tokens=16000,
                 system=system,
                 messages=[{"role": "user", "content": content}],
                 output_config={"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
+                **fallback,
             )
         except anthropic.APIConnectionError as exc:  # includes timeouts
             logger.warning("Anthropic unreachable: %s", exc)

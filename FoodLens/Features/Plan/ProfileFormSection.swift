@@ -23,8 +23,24 @@ struct ProfileFormSection: View {
             Picker("Мета", selection: $profile.goal) {
                 ForEach(NutritionProfile.Goal.allCases) { Text($0.title).tag($0) }
             }
+            if !profile.goal.rateOptions.isEmpty {
+                Picker("Темп", selection: Binding(get: { profile.rate }, set: { profile.weeklyRateKG = $0 })) {
+                    ForEach(profile.goal.rateOptions, id: \.self) { rate in
+                        Text("\(rate.formatted(.number.precision(.fractionLength(0...2)))) кг/тиж").tag(rate)
+                    }
+                }
+                NumberFieldRow(title: "Цільова вага", value: Binding(
+                    get: { profile.targetWeightKG ?? 0 },
+                    set: { profile.targetWeightKG = $0 > 0 ? $0 : nil }
+                ), unit: "кг")
+            }
             Picker("Тип раціону", selection: $profile.diet) {
                 ForEach(NutritionProfile.Diet.allCases) { Text($0.title).tag($0) }
+            }
+        }
+        if let mismatch = profile.targetWeightMismatch {
+            Section {
+                Label(mismatch, systemImage: "exclamationmark.circle").foregroundStyle(Theme.warning)
             }
         }
         if !profile.isValid {
@@ -61,8 +77,14 @@ struct GoalsSummaryCard: View {
                     .background(macro.color.opacity(0.10), in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 }
             }
-            Label("Вода: \(Int(goals.waterML)) мл", systemImage: "drop.fill")
-                .font(.subheadline).foregroundStyle(Theme.water)
+            HStack {
+                Label("Вода: \(Int(goals.waterML)) мл", systemImage: "drop.fill")
+                    .font(.subheadline).foregroundStyle(Theme.water)
+                Spacer()
+                if let split = goals.macroSplit {
+                    Text("Б/Ж/В \(split.percentText)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

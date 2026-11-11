@@ -48,7 +48,7 @@ final class DiaryStore {
         self.defaults = defaults
         self.calendar = calendar
         self.storageIssue = storageIssue
-        goals = Self.loadValue(NutritionGoals.self, forKey: Keys.goals, from: defaults) ?? NutritionGoals()
+        goals = Self.loadValue(NutritionGoals.self, forKey: Keys.goals, from: defaults) ?? .standard
         profile = Self.loadValue(NutritionProfile.self, forKey: Keys.profile, from: defaults)
         if migrateLegacyData { migrateLegacyDataIfNeeded() }
         reload()
@@ -101,6 +101,10 @@ final class DiaryStore {
         if let weight = latestWeight?.kilograms { result.weightKG = weight }
         return result
     }
+
+    /// The saved profile with the latest logged weight, or nil when the user has not set up a profile.
+    /// Energy estimates use this so a new weigh-in updates the resting energy right away.
+    var profileForEstimates: NutritionProfile? { profile == nil ? nil : profileWithLatestWeight }
 
     // MARK: Meals
 

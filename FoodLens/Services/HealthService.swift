@@ -73,7 +73,7 @@ struct HealthReader: Sendable {
 
         let ringGoals = await goals
         return await ActivitySnapshot(
-            steps: steps, distanceMeters: distance, activeCalories: energy, restingCalories: resting, exerciseMinutes: exercise,
+            day: start, steps: steps, distanceMeters: distance, activeCalories: energy, restingCalories: resting, exerciseMinutes: exercise,
             standHours: stand, flightsClimbed: flights,
             moveGoal: ringGoals.move, exerciseGoal: ringGoals.exercise, standGoal: ringGoals.stand,
             workouts: workouts,
@@ -82,6 +82,8 @@ struct HealthReader: Sendable {
         )
     }
 
+    /// Statistics queries merge overlapping samples from iPhone, Apple Watch and other apps using the
+    /// source priority set in Health, so the same energy is not counted twice across devices.
     private func sum(_ id: HKQuantityTypeIdentifier, _ unit: HKUnit, from start: Date, to end: Date) async -> Double {
         let descriptor = HKStatisticsQueryDescriptor(
             predicate: .quantitySample(type: HKQuantityType(id), predicate: HKQuery.predicateForSamples(withStart: start, end: end)),

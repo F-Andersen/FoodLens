@@ -33,6 +33,18 @@ struct NutritionPlanView: View {
                     LabeledContent("Базовий обмін", value: "\(Int(profile.bmr)) ккал")
                     LabeledContent("Підтримка ваги", value: "\(Int(profile.maintenanceCalories)) ккал")
                     LabeledContent("ІМТ", value: String(format: "%.1f — %@", profile.bmi, bmiDescription))
+                    if profile.goal != .maintain {
+                        LabeledContent(profile.goal == .lose ? "Дефіцит на день" : "Профіцит на день",
+                                       value: "~\(Int(abs(profile.dailyAdjustment).rounded())) ккал")
+                    }
+                    if let weeks = profile.weeksToTarget {
+                        LabeledContent("До цільової ваги", value: "орієнтовно \(Int(weeks.rounded(.up))) тиж.")
+                    }
+                    if let notice = profile.floorNotice {
+                        Label(notice, systemImage: "info.circle").font(.caption).foregroundStyle(Theme.warning)
+                    } else if let warning = profile.deficitWarning(forCalories: profile.calculatedGoals.calories) {
+                        Label(warning, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(Theme.warning)
+                    }
                     Button {
                         diary.goals = profile.calculatedGoals
                         goalsApplied = true
@@ -44,6 +56,8 @@ struct NutritionPlanView: View {
                     .disabled(goalsApplied)
                 } header: {
                     Text("Розрахована норма")
+                } footer: {
+                    Text("Застосування замінить поточні денні цілі. Темп і строки — орієнтовні: вага змінюється нерівномірно, це не гарантований результат.")
                 }
 
                 Section("Приклад меню на день") {

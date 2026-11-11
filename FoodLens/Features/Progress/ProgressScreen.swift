@@ -18,7 +18,7 @@ struct ProgressScreen: View {
         List {
             Section("Калорії за 7 днів") {
                 Chart(days, id: \.self) { day in
-                    BarMark(x: .value("День", day, unit: .day), y: .value("Ккал", diary.calories(on: day)))
+                    BarMark(x: .value("День", day, unit: .day), y: .value("Ккал", diary.totals(on: day).calories))
                         .foregroundStyle(.orange.gradient)
                     RuleMark(y: .value("Ціль", diary.goals.calories))
                         .foregroundStyle(Theme.accent.opacity(0.6))
@@ -28,6 +28,7 @@ struct ProgressScreen: View {
             }
             activitySection
             balanceSection
+            macroSection
             Section("Вага") {
                 if let latest = diary.latestWeight {
                     LabeledContent("Поточна вага", value: "\(latest.kilograms.formatted(.number.precision(.fractionLength(0...1)))) кг")
@@ -35,9 +36,20 @@ struct ProgressScreen: View {
                     Text("Записів ваги ще немає").foregroundStyle(.secondary)
                 }
                 if diary.weights.count > 1 {
-                    Chart(diary.weights.reversed()) { record in
-                        LineMark(x: .value("Дата", record.date), y: .value("кг", record.kilograms)).interpolationMethod(.catmullRom)
-                        PointMark(x: .value("Дата", record.date), y: .value("кг", record.kilograms))
+                    Chart {
+                        ForEach(diary.weights.reversed()) { record in
+                            LineMark(x: .value("Дата", record.date), y: .value("кг", record.kilograms)).interpolationMethod(.catmullRom)
+                            PointMark(x: .value("Дата", record.date), y: .value("кг", record.kilograms))
+                        }
+                        if let target = diary.profile?.targetWeightKG {
+                            RuleMark(y: .value("Ціль", target))
+                                .foregroundStyle(Theme.accent.opacity(0.6))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                .annotation(position: .top, alignment: .leading) {
+                                    Text("ціль \(target.formatted(.number.precision(.fractionLength(0...1)))) кг")
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                }
+                        }
                     }
                     .chartYScale(domain: .automatic(includesZero: false))
                     .frame(height: 190)
@@ -97,33 +109,83 @@ struct ProgressScreen: View {
 
     @ViewBuilder
     private var balanceSection: some View {
-        let days = DayBalance.week(snapshot: health.snapshot, profile: diary.profile,
-                                   eaten: { Double(diary.calories(on: $0)) })
+        let profile = diary.profileForEstimates
+        let days = DayBalance.week(snapshot: health.snapshot, profile: profile,
+                                   eaten: { diary.totals(on: $0).calories })
         Section {
             if days.isEmpty {
-                Text(diary.profile == nil && health.snapshot.restingCalories == 0
+                Text(profile == nil && health.snapshot.restingCalories == 0
                      ? "Вкажіть профіль у «Норма та меню» або дозвольте читати енергію спокою з Apple Health."
                      : "Ще немає днів із записаною їжею.")
                     .foregroundStyle(.secondary)
             } else {
                 Chart {
                     ForEach(days) { day in
-                        BarMark(x: .value("День", day.day, unit: .day), y: .value("Баланс", day.balance))
-                            .foregroundStyle(day.balance <= 0 ? Theme.accent : Theme.warning)
+                        BarMark(x: .value("День", day.day, unit: .day), y: .value("Дефіцит", day.deficit))
+                            .foregroundStyle(day.deficit >= 0 ? Theme.accent : Theme.warning)
                             .opacity(day.isToday ? 0.55 : 1)
                     }
                     RuleMark(y: .value("Нуль", 0)).foregroundStyle(.secondary)
                 }
                 .frame(height: 170)
-                let total = days.reduce(0) { $0 + $1.balance }
-                LabeledContent(total <= 0 ? "Сумарний дефіцит" : "Сумарний профіцит",
-                               value: "\(Int(abs(total).rounded()).formatted()) ккал")
-                LabeledContent("≈ зміна ваги", value: "\((total / 7700).formatted(.number.precision(.fractionLength(2)))) кг")
+                if let week = WeekEnergySummary(days) {
+                    LabeledContent("Спожито в середньому", value: "\(Int(week.averageEaten.rounded()).formatted()) ккал")
+                    LabeledContent("Витрати в середньому", value: "\(Int(week.averageBurned.rounded()).formatted()) ккал")
+                    let average = Int(week.averageDeficit.rounded())
+                    LabeledContent(average >= 0 ? "Орієнтовний дефіцит" : "Орієнтовний профіцит",
+                                   value: "\(abs(average).formatted()) ккал/день")
+                    LabeledContent("Орієнтовна зміна ваги",
+                                   value: "\(week.estimatedWeightChangeKG.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always()))) кг")
+                } else {
+                    Text("Середні значення з'являться після першого завершеного дня із записами.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
         } header: {
             Text("Енергобаланс за 7 днів")
         } footer: {
-            Text("З'їдено мінус витрачено (енергія спокою + активність). Нижче нуля — дефіцит. Сьогоднішній стовпчик блідіший: день ще триває. Дні без записів їжі пропущено; 7 700 ккал ≈ 1 кг.")
+            Text("Витрачено (енергія спокою + активність) мінус спожите. Вище нуля — дефіцит, нижче — профіцит. Сьогоднішній стовпчик блідіший і не входить у середні: день ще триває. Дні без записів їжі пропущено. Зміна ваги — грубий орієнтир (7 700 ккал ≈ 1 кг), а не прогноз: вода та похибка оцінок сильно впливають на результат.")
+        }
+    }
+
+    private struct MacroDay: Identifiable {
+        let day: Date
+        let macro: Macro
+        let kcal: Double
+        var id: String { "\(day.timeIntervalSince1970)-\(macro.title)" }
+    }
+
+    @ViewBuilder
+    private var macroSection: some View {
+        let logged = days.filter { !diary.entries(on: $0).isEmpty }
+        Section {
+            if logged.isEmpty {
+                Text("Ще немає записів їжі за тиждень.").foregroundStyle(.secondary)
+            } else {
+                let points = logged.flatMap { day in
+                    let totals = diary.totals(on: day)
+                    return [MacroDay(day: day, macro: .protein, kcal: totals.protein * MacroEnergy.protein),
+                            MacroDay(day: day, macro: .fat, kcal: totals.fat * MacroEnergy.fat),
+                            MacroDay(day: day, macro: .carbs, kcal: totals.carbs * MacroEnergy.carbs)]
+                }
+                Chart(points) { point in
+                    BarMark(x: .value("День", point.day, unit: .day), y: .value("ккал", point.kcal))
+                        .foregroundStyle(by: .value("Макро", point.macro.title))
+                }
+                .chartForegroundStyleScale(domain: [Macro.protein.title, Macro.fat.title, Macro.carbs.title],
+                                           range: [Macro.protein.color, Macro.fat.color, Macro.carbs.color])
+                .chartLegend(position: .bottom, alignment: .leading)
+                .frame(height: 170)
+                let average = NutritionTotals.average(of: logged.map { diary.totals(on: $0) })
+                ForEach([Macro.protein, .fat, .carbs, .fiber]) { macro in
+                    LabeledContent(macro.title,
+                                   value: "\(Int(macro.value(in: average).rounded())) / \(Int(macro.goal(in: diary.goals).rounded())) г")
+                }
+            }
+        } header: {
+            Text("БЖВ за 7 днів")
+        } footer: {
+            Text("Стовпчики — енергія з білків, жирів і вуглеводів за день. Нижче — середнє за дні із записами проти денної цілі.")
         }
     }
 

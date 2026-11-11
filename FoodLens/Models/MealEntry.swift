@@ -186,4 +186,16 @@ struct NutritionTotals: Equatable, Sendable {
     }
 
     var kcal: Int { Int(calories.rounded()) }
+
+    /// The per-day average of several days' totals; zero for an empty list.
+    static func average(of days: [NutritionTotals]) -> NutritionTotals {
+        var result = NutritionTotals()
+        guard !days.isEmpty else { return result }
+        let count = Double(days.count)
+        for day in days {
+            result.calories += day.calories / count; result.protein += day.protein / count
+            result.carbs += day.carbs / count; result.fat += day.fat / count; result.fiber += day.fiber / count
+        }
+        return result
+    }
 }

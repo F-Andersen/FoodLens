@@ -89,8 +89,13 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     StatLine(icon: "flag.checkered", tint: .secondary, title: "Ціль", value: Int(goal.rounded()))
                     StatLine(icon: "fork.knife", tint: Theme.accent, title: "Спожито", value: totals.kcal)
-                    StatLine(icon: "flame.fill", tint: Ring.move.color, title: "Спалено (активність)",
-                             value: Int(health.snapshot.activeCalories.rounded()))
+                    if let burned = EnergyBalance.today(snapshot: health.snapshot, profile: diary.profileForEstimates,
+                                                        eaten: totals.calories)?.display.burned {
+                        StatLine(icon: "flame.fill", tint: Ring.move.color, title: "Витрати енергії", value: burned)
+                    } else {
+                        StatLine(icon: "flame.fill", tint: Ring.move.color, title: "Спалено (активність)",
+                                 value: Int(health.snapshot.activeCalories.rounded()))
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -100,8 +105,25 @@ struct DashboardView: View {
                     MacroBar(macro: macro, value: macro.value(in: totals), goal: macro.goal(in: diary.goals))
                 }
             }
+            if !diary.goals.macrosMatchCalories { macroMismatchNotice }
         }
         .cardStyle()
+    }
+
+    /// Shown when the gram goals do not add up to the calorie goal. Nothing is changed until the user decides.
+    private var macroMismatchNotice: some View {
+        let goals = diary.goals
+        return Button { showSettings = true } label: {
+            HStack(alignment: .top, spacing: Spacing.s) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
+                Text("Цілі БЖВ дають \(Int(goals.macroCalories.rounded())) ккал, а денна ціль — \(Int(goals.calories.rounded())) ккал. Перевірте цілі в налаштуваннях.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var setupPrompt: some View {

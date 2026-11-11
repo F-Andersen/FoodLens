@@ -23,7 +23,8 @@ struct NutritionTests {
         let profile = NutritionProfile()
         let goals = profile.calculatedGoals
         let energy = goals.protein * 4 + goals.carbs * 4 + goals.fat * 9
-        #expect(abs(energy - goals.calories) < 0.001)
+        #expect(abs(energy - goals.calories) <= 2) // whole grams, carbohydrates take the remainder
+        #expect(goals.calories == NutritionProfile().targetCalories.rounded())
     }
 
     @Test func mealPlanCoversAllMealTypes() {

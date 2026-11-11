@@ -93,6 +93,10 @@ enum Macro: CaseIterable, Identifiable {
         }
     }
 
+    /// Fat and carbohydrate goals work as upper limits; protein and fiber goals as minimums,
+    /// so going over them is shown neutrally and falling short is never an error.
+    var isUpperLimit: Bool { self == .fat || self == .carbs }
+
     func goal(in goals: NutritionGoals) -> Double {
         switch self {
         case .protein: goals.protein
@@ -214,28 +218,51 @@ struct MacroBar: View {
     let value: Double
     let goal: Double
 
+    private var progress: GoalProgress { GoalProgress(value: value, goal: goal, isUpperLimit: macro.isUpperLimit) }
+
     var body: some View {
+        let progress = progress
+        let isOver = progress.state == .overLimit
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: macro.icon).foregroundStyle(macro.color).font(.caption)
                 Text(macro.title).font(.subheadline.weight(.medium))
                 Spacer()
-                Text("\(Text("\(Int(value.rounded()))").number(.subheadline)) / \(Int(goal.rounded())) г")
+                Text("\(Text("\(progress.value)").number(.subheadline).foregroundStyle(isOver ? Theme.warning : .primary)) / \(progress.goal) г")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.track)
-                    Capsule().fill(value > goal && goal > 0 ? Theme.warning : macro.color)
-                        .frame(width: proxy.size.width * progress(value, of: goal))
-                        .animation(.smooth, value: value)
+                    if let marker = progress.goalMarker {
+                        // Over the goal: the bar is scaled to the value and a tick shows where the goal was.
+                        Capsule().fill(isOver ? Theme.warning : macro.color)
+                        Rectangle().fill(Theme.card)
+                            .frame(width: 2)
+                            .offset(x: proxy.size.width * marker - 1)
+                    } else {
+                        Capsule().fill(macro.color)
+                            .frame(width: proxy.size.width * progress.fraction)
+                    }
                 }
+                .animation(.smooth, value: value)
             }
             .frame(height: 8)
+            if progress.excess > 0 {
+                Text(isOver ? "Перевищення: +\(progress.excess) г" : "Понад ціль: +\(progress.excess) г")
+                    .font(.caption)
+                    .foregroundStyle(isOver ? Theme.warning : .secondary)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(macro.title)
-        .accessibilityValue("\(Int(value.rounded())) з \(Int(goal.rounded())) грам")
+        .accessibilityValue(accessibilityValue(progress))
+    }
+
+    private func accessibilityValue(_ progress: GoalProgress) -> String {
+        let base = "\(progress.value) з \(progress.goal) грам"
+        guard progress.excess > 0 else { return base }
+        return progress.state == .overLimit ? "\(base), перевищення на \(progress.excess)" : "\(base), понад ціль на \(progress.excess)"
     }
 }
 

@@ -2,6 +2,8 @@ import Foundation
 
 /// Activity data read from Apple Health. Free of HealthKit types so it is easy to test and preview.
 struct ActivitySnapshot: Equatable, Sendable {
+    /// The calendar day the "today" values belong to; nil for hand-made snapshots (tests, previews).
+    var day: Date?
     var steps = 0.0
     var distanceMeters = 0.0
     var activeCalories = 0.0
@@ -18,8 +20,14 @@ struct ActivitySnapshot: Equatable, Sendable {
     /// The last seven days, oldest first, including today.
     var week: [DayActivity] = []
 
+    /// False once midnight has passed since the snapshot was read: its "today" values are yesterday's.
+    func describes(day other: Date, calendar: Calendar = .current) -> Bool {
+        guard let day else { return true }
+        return calendar.isDate(day, inSameDayAs: other)
+    }
+
     var hasAnyData: Bool {
-        steps > 0 || activeCalories > 0 || exerciseMinutes > 0 || standHours > 0 || !workouts.isEmpty
+        steps > 0 || activeCalories > 0 || restingCalories > 0 || exerciseMinutes > 0 || standHours > 0 || !workouts.isEmpty
             || week.contains { $0.steps > 0 || $0.activeCalories > 0 }
     }
 
@@ -62,7 +70,7 @@ struct ActivitySnapshot: Equatable, Sendable {
             resting[day] = offset == 0 ? 1_420 : 1_780
         }
         return ActivitySnapshot(
-            steps: 8_214, distanceMeters: 6_120, activeCalories: 412, restingCalories: 1_420, exerciseMinutes: 34, standHours: 9,
+            day: today, steps: 8_214, distanceMeters: 6_120, activeCalories: 412, restingCalories: 1_420, exerciseMinutes: 34, standHours: 9,
             flightsClimbed: 7, moveGoal: 500, exerciseGoal: 30, standGoal: 12,
             workouts: [
                 WorkoutSummary(id: UUID(), kind: .running, start: today.addingTimeInterval(7.5 * 3600),

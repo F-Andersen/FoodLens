@@ -84,7 +84,7 @@ struct EditMealEntryView: View {
         _portion = State(initialValue: PortionTracker(grams: entry.grams))
         _name = State(initialValue: entry.name)
         _grams = State(initialValue: entry.grams)
-        _calories = State(initialValue: entry.calories.rounded())
+        _calories = State(initialValue: entry.calories)
         _protein = State(initialValue: entry.protein)
         _carbs = State(initialValue: entry.carbs)
         _fat = State(initialValue: entry.fat)

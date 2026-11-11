@@ -27,6 +27,7 @@ struct ProgressScreen: View {
                 .frame(height: 190)
             }
             activitySection
+            balanceSection
             Section("Вага") {
                 if let latest = diary.latestWeight {
                     LabeledContent("Поточна вага", value: "\(latest.kilograms.formatted(.number.precision(.fractionLength(0...1)))) кг")
@@ -92,6 +93,38 @@ struct ProgressScreen: View {
         case steps = "Кроки"
         case calories = "Активні ккал"
         var id: Self { self }
+    }
+
+    @ViewBuilder
+    private var balanceSection: some View {
+        let days = DayBalance.week(snapshot: health.snapshot, profile: diary.profile,
+                                   eaten: { Double(diary.calories(on: $0)) })
+        Section {
+            if days.isEmpty {
+                Text(diary.profile == nil && health.snapshot.restingCalories == 0
+                     ? "Вкажіть профіль у «Норма та меню» або дозвольте читати енергію спокою з Apple Health."
+                     : "Ще немає днів із записаною їжею.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Chart {
+                    ForEach(days) { day in
+                        BarMark(x: .value("День", day.day, unit: .day), y: .value("Баланс", day.balance))
+                            .foregroundStyle(day.balance <= 0 ? Theme.accent : Theme.warning)
+                            .opacity(day.isToday ? 0.55 : 1)
+                    }
+                    RuleMark(y: .value("Нуль", 0)).foregroundStyle(.secondary)
+                }
+                .frame(height: 170)
+                let total = days.reduce(0) { $0 + $1.balance }
+                LabeledContent(total <= 0 ? "Сумарний дефіцит" : "Сумарний профіцит",
+                               value: "\(Int(abs(total).rounded()).formatted()) ккал")
+                LabeledContent("≈ зміна ваги", value: "\((total / 7700).formatted(.number.precision(.fractionLength(2)))) кг")
+            }
+        } header: {
+            Text("Енергобаланс за 7 днів")
+        } footer: {
+            Text("З'їдено мінус витрачено (енергія спокою + активність). Нижче нуля — дефіцит. Сьогоднішній стовпчик блідіший: день ще триває. Дні без записів їжі пропущено; 7 700 ккал ≈ 1 кг.")
+        }
     }
 
     @ViewBuilder

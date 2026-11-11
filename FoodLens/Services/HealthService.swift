@@ -18,6 +18,7 @@ final class HealthService {
         HKQuantityType(.stepCount),
         HKQuantityType(.distanceWalkingRunning),
         HKQuantityType(.activeEnergyBurned),
+        HKQuantityType(.basalEnergyBurned),
         HKQuantityType(.appleExerciseTime),
         HKQuantityType(.flightsClimbed),
         HKCategoryType(.appleStandHour),
@@ -60,6 +61,7 @@ struct HealthReader: Sendable {
         async let steps = sum(.stepCount, .count(), from: start, to: now)
         async let distance = sum(.distanceWalkingRunning, .meter(), from: start, to: now)
         async let energy = sum(.activeEnergyBurned, .kilocalorie(), from: start, to: now)
+        async let resting = sum(.basalEnergyBurned, .kilocalorie(), from: start, to: now)
         async let exercise = sum(.appleExerciseTime, .minute(), from: start, to: now)
         async let flights = sum(.flightsClimbed, .count(), from: start, to: now)
         async let stand = standHours(from: start, to: now)
@@ -67,14 +69,16 @@ struct HealthReader: Sendable {
         async let workouts = workouts(from: start, to: now)
         async let weekSteps = daily(.stepCount, .count(), endingAt: now, calendar: calendar)
         async let weekEnergy = daily(.activeEnergyBurned, .kilocalorie(), endingAt: now, calendar: calendar)
+        async let weekResting = daily(.basalEnergyBurned, .kilocalorie(), endingAt: now, calendar: calendar)
 
         let ringGoals = await goals
         return await ActivitySnapshot(
-            steps: steps, distanceMeters: distance, activeCalories: energy, exerciseMinutes: exercise,
+            steps: steps, distanceMeters: distance, activeCalories: energy, restingCalories: resting, exerciseMinutes: exercise,
             standHours: stand, flightsClimbed: flights,
             moveGoal: ringGoals.move, exerciseGoal: ringGoals.exercise, standGoal: ringGoals.stand,
             workouts: workouts,
-            week: ActivitySnapshot.week(endingAt: now, steps: weekSteps, calories: weekEnergy, calendar: calendar)
+            week: ActivitySnapshot.week(endingAt: now, steps: weekSteps, calories: weekEnergy, resting: weekResting,
+                                        calendar: calendar)
         )
     }
 

@@ -5,6 +5,8 @@ struct ActivitySnapshot: Equatable, Sendable {
     var steps = 0.0
     var distanceMeters = 0.0
     var activeCalories = 0.0
+    /// Resting (basal) energy burned so far today, as estimated by iPhone or Apple Watch.
+    var restingCalories = 0.0
     var exerciseMinutes = 0.0
     var standHours = 0
     var flightsClimbed = 0.0
@@ -38,11 +40,12 @@ struct ActivitySnapshot: Equatable, Sendable {
 
     /// Builds the seven-day series from per-day sums, filling missing days with zero.
     static func week(endingAt now: Date, steps: [Date: Double], calories: [Date: Double],
-                     calendar: Calendar = .current) -> [DayActivity] {
+                     resting: [Date: Double] = [:], calendar: Calendar = .current) -> [DayActivity] {
         let today = calendar.startOfDay(for: now)
         return (0..<7).reversed().compactMap { offset in
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            return DayActivity(day: day, steps: steps[day] ?? 0, activeCalories: calories[day] ?? 0)
+            return DayActivity(day: day, steps: steps[day] ?? 0, activeCalories: calories[day] ?? 0,
+                               restingCalories: resting[day] ?? 0)
         }
     }
 
@@ -51,14 +54,15 @@ struct ActivitySnapshot: Equatable, Sendable {
         let today = calendar.startOfDay(for: now)
         let stepsByDay = [6_420.0, 9_850, 4_310, 11_240, 7_980, 12_660, 8_214]
         let caloriesByDay = [310.0, 455, 220, 530, 380, 610, 412]
-        var steps: [Date: Double] = [:], calories: [Date: Double] = [:]
+        var steps: [Date: Double] = [:], calories: [Date: Double] = [:], resting: [Date: Double] = [:]
         for (index, offset) in (0..<7).reversed().enumerated() {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
             steps[day] = stepsByDay[index]
             calories[day] = caloriesByDay[index]
+            resting[day] = offset == 0 ? 1_420 : 1_780
         }
         return ActivitySnapshot(
-            steps: 8_214, distanceMeters: 6_120, activeCalories: 412, exerciseMinutes: 34, standHours: 9,
+            steps: 8_214, distanceMeters: 6_120, activeCalories: 412, restingCalories: 1_420, exerciseMinutes: 34, standHours: 9,
             flightsClimbed: 7, moveGoal: 500, exerciseGoal: 30, standGoal: 12,
             workouts: [
                 WorkoutSummary(id: UUID(), kind: .running, start: today.addingTimeInterval(7.5 * 3600),
@@ -66,7 +70,7 @@ struct ActivitySnapshot: Equatable, Sendable {
                 WorkoutSummary(id: UUID(), kind: .strength, start: today.addingTimeInterval(18 * 3600),
                                duration: 40 * 60, activeCalories: 190, distanceMeters: nil)
             ],
-            week: week(endingAt: now, steps: steps, calories: calories, calendar: calendar)
+            week: week(endingAt: now, steps: steps, calories: calories, resting: resting, calendar: calendar)
         )
     }
 }
@@ -75,6 +79,7 @@ struct DayActivity: Identifiable, Hashable, Sendable {
     var day: Date
     var steps: Double
     var activeCalories: Double
+    var restingCalories: Double = 0
     var id: Date { day }
 }
 

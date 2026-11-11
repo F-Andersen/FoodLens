@@ -20,6 +20,7 @@ struct DashboardView: View {
                     .padding(.horizontal, Spacing.xs)
                     .padding(.top, -Spacing.s)
                 summaryCard(totals)
+                EnergyBalanceCard { showNutritionPlan = true }
                 if diary.profile == nil { setupPrompt }
                 quickActions
                 ActivityCard()

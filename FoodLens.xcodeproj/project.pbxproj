@@ -248,7 +248,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = FoodLens;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера використовується для розпізнавання страв і оцінки порції.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "FoodLens читає кроки, відстань, активні калорії, тренування та кільця активності, щоб показувати активність поруч із харчуванням.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "FoodLens читає кроки, відстань, активні калорії й енергію спокою, тренування та кільця активності, щоб показувати активність і реальний дефіцит калорій поруч із харчуванням.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Мікрофон використовується для голосового додавання страв.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Розпізнавання мовлення перетворює опис страви на текст.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -280,7 +280,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = FoodLens;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера використовується для розпізнавання страв і оцінки порції.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "FoodLens читає кроки, відстань, активні калорії, тренування та кільця активності, щоб показувати активність поруч із харчуванням.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "FoodLens читає кроки, відстань, активні калорії й енергію спокою, тренування та кільця активності, щоб показувати активність і реальний дефіцит калорій поруч із харчуванням.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Мікрофон використовується для голосового додавання страв.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Розпізнавання мовлення перетворює опис страви на текст.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

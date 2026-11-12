@@ -168,9 +168,13 @@ struct ManualEntryView: View {
     @State private var fiber = 0.0
     @State private var mealType: MealEntry.MealType
     @State private var savedTick = 0
+    @State private var autoFill = AutoFillTracker()
+    @State private var parsed: MealTextParser.Result?
+    private let initialMealType: MealEntry.MealType
 
     init(mealType: MealEntry.MealType = .suggested(for: .now)) {
         _mealType = State(initialValue: mealType)
+        initialMealType = mealType
     }
 
     private var canSave: Bool {
@@ -216,6 +220,7 @@ struct ManualEntryView: View {
                     .accessibilityLabel(voice.isRecording ? "Зупинити диктування" : "Описати голосом")
                 }
                 if let error = voice.errorMessage { Text(error).font(.caption).foregroundStyle(Theme.warning) }
+                if let parsed, parsed.hasNutrition { parsedSummary(parsed) }
                 Picker("Прийом їжі", selection: $mealType) {
                     ForEach(MealEntry.MealType.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
                 }
@@ -226,7 +231,7 @@ struct ManualEntryView: View {
             } header: {
                 Text("Порція")
             } footer: {
-                Text("Якщо вага невідома, залиште 0.")
+                Text("Якщо вага невідома, залиште 0. Калорії, БЖВ і вагу можна написати прямо в описі — вони підставляться самі.")
             }
             Section("БЖВ") {
                 NumberFieldRow(title: Macro.protein.title, value: $protein, unit: "г")
@@ -239,6 +244,7 @@ struct ManualEntryView: View {
         .keyboardDismissal()
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: voice.transcript) { _, value in if !value.isEmpty { name = value } }
+        .onChange(of: name) { _, value in applyParsedText(value) }
         .onDisappear { voice.stop() }
         .sensoryFeedback(.success, trigger: savedTick)
         .toolbar {
@@ -249,6 +255,32 @@ struct ManualEntryView: View {
         }
     }
 
+    private func parsedSummary(_ result: MealTextParser.Result) -> some View {
+        var parts: [String] = []
+        if let calories = result.calories {
+            parts.append("\(Int(calories.rounded())) ккал\(result.caloriesFromMacros ? " (з БЖВ)" : "")")
+        }
+        for (label, value) in [("Б", result.protein), ("Ж", result.fat), ("В", result.carbs), ("К", result.fiber)] {
+            if let value { parts.append("\(label) \(value.formatted(.number.precision(.fractionLength(0...1))))") }
+        }
+        if let grams = result.grams { parts.append("\(Int(grams.rounded())) г") }
+        return Label("З опису: " + parts.joined(separator: " · "), systemImage: "text.viewfinder")
+            .font(.caption).foregroundStyle(Theme.accent)
+    }
+
+    /// Fills the numbers written in the description; fields the user edited by hand are left alone.
+    private func applyParsedText(_ text: String) {
+        let result = MealTextParser.parse(text)
+        parsed = result
+        calories = autoFill.update(.calories, current: calories, parsed: result.calories)
+        protein = autoFill.update(.protein, current: protein, parsed: result.protein)
+        fat = autoFill.update(.fat, current: fat, parsed: result.fat)
+        carbs = autoFill.update(.carbs, current: carbs, parsed: result.carbs)
+        fiber = autoFill.update(.fiber, current: fiber, parsed: result.fiber)
+        grams = autoFill.update(.grams, current: grams, parsed: result.grams)
+        mealType = autoFill.updateMealType(current: mealType, initial: initialMealType, parsed: result.mealType)
+    }
+
     private func fill(from entry: MealEntry) {
         name = entry.name; calories = entry.calories.rounded(); grams = entry.grams
         protein = entry.protein; carbs = entry.carbs; fat = entry.fat; fiber = entry.fiber
@@ -256,7 +288,7 @@ struct ManualEntryView: View {
 
     private func save() {
         diary.add(MealEntry(
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines), grams: grams, calories: calories,
+            name: MealTextParser.parse(name).name, grams: grams, calories: calories,
             protein: protein, carbs: carbs, fat: fat, fiber: fiber, mealType: mealType
         ))
         savedTick += 1

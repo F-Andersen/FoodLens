@@ -1,0 +1,42 @@
+# Production stack for a single VPS: the API behind Caddy, which obtains and renews HTTPS certificates.
+#   cp .env.example .env   # fill in DOMAIN, AUTH_SECRET and the AI key
+#   docker compose up -d --build
+services:
+  api:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8000"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  caddy_data:
+  caddy_config:

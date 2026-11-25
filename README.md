@@ -1,12 +1,16 @@
 # FoodLens
 
-![FoodLens — AI-трекер харчування для iPhone](docs/screenshots/00-hero.png)
+![FoodLens project cover](docs/assets/project-poster.png)
 
 **FoodLens** — нативний iOS-застосунок українською мовою для обліку харчування. Ви фотографуєте страву, AI оцінює калорії та БЖВ, а застосунок рахує живий енергобаланс з даними Apple Health і підбирає рецепти з того, що є в холодильнику.
 
 Проєкт складається з двох частин: iOS-застосунок на SwiftUI та власний сервер на FastAPI. Сервер тримає API-ключі й звертається до Claude, OpenAI або Gemini. Щоденник і базовий облік працюють і без сервера.
 
 **Стек:** Swift 6 · SwiftUI · SwiftData · Swift Charts · HealthKit · Vision · FastAPI · Docker · nginx · Claude API
+
+## Демо та вихідний код
+
+**[Вихідний код FoodLens](https://github.com/F-Andersen/FoodLens)**. Це нативний iOS-застосунок; публічне вебдемо інтерфейсу не опубліковано. Для запуску в Xcode та перегляду демо-даних скористайтеся інструкціями нижче.
 
 ## Головне
 
@@ -19,6 +23,8 @@
 - 🌙 Світла й темна теми, Liquid Glass на iOS 26, Dynamic Type, 131 модульний тест.
 
 ## Екрани
+
+![FoodLens — AI-трекер харчування для iPhone](docs/screenshots/00-hero.png)
 
 | Сьогодні | Енергобаланс і активність | Прийоми їжі та вода |
 | :---: | :---: | :---: |

@@ -63,6 +63,11 @@ struct RootView: View {
             }
         }
         .onAppear {
+            #if DEBUG
+            // Screenshots: `-startTab 2` opens a tab directly.
+            if let tab = AppTab(rawValue: UserDefaults.standard.integer(forKey: "startTab")),
+               UserDefaults.standard.object(forKey: "startTab") != nil { selectedTab = tab }
+            #endif
             // Existing users who already set a profile skip onboarding.
             if !onboardingCompleted && diary.profile == nil { showOnboarding = true }
         }

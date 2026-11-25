@@ -245,6 +245,12 @@ struct ManualEntryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: voice.transcript) { _, value in if !value.isEmpty { name = value } }
         .onChange(of: name) { _, value in applyParsedText(value) }
+        #if DEBUG
+        .onAppear {
+            // Screenshots: `-demoManualText "..."` prefills the description.
+            if name.isEmpty, let text = UserDefaults.standard.string(forKey: "demoManualText") { name = text }
+        }
+        #endif
         .onDisappear { voice.stop() }
         .sensoryFeedback(.success, trigger: savedTick)
         .toolbar {

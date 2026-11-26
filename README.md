@@ -1,6 +1,6 @@
 # FoodLens
 
-![FoodLens project cover](docs/assets/project-poster.png)
+![FoodLens — AI-трекер харчування для iPhone](docs/screenshots/00-hero.png)
 
 FoodLens — нативний iOS-застосунок для обліку харчування з AI-розпізнаванням страв за фото, розрахунком енергобалансу на основі Apple Health і підбором рецептів із наявних продуктів. Інтерфейс українською мовою.
 
@@ -88,7 +88,7 @@ FoodLens — нативний iOS-застосунок для обліку ха�
 
 ## Скриншоти
 
-![FoodLens — AI-трекер харчування для iPhone](docs/screenshots/00-hero.png)
+
 
 | Сьогодні | Енергобаланс і активність | Прийоми їжі та вода |
 | :---: | :---: | :---: |

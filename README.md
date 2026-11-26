@@ -8,7 +8,7 @@ FoodLens — нативний iOS-застосунок для обліку ха�
 
 | | |
 | --- | --- |
-| Версія | 0.3.1 |
+| Версія | 0.3.2 |
 | Платформа | iOS 17+, iPhone |
 | Мова | Swift 6 (strict concurrency) |
 | Сервер | Python 3.12, FastAPI, Docker |
